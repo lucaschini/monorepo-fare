@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth";
 import clientesRoutes from "./routes/clientes";
+import catalogoRoutes from "./routes/catalogo";
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use("/auth/login", loginLimiter);
 // Routes
 app.use("/auth", authRoutes);
 app.use("/clientes", clientesRoutes);
+app.use("/catalogo", catalogoRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {

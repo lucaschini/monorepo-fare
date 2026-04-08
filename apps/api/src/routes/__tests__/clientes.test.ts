@@ -7,7 +7,6 @@ import bcrypt from "bcryptjs";
 let token: string;
 
 beforeAll(async () => {
-  // Setup: tabelas + usuário + login para pegar token
   await pool.query(`
     CREATE TABLE IF NOT EXISTS usuarios (
       id SERIAL PRIMARY KEY,
@@ -18,19 +17,19 @@ beforeAll(async () => {
     );
     CREATE TABLE IF NOT EXISTS clientes (
       id SERIAL PRIMARY KEY,
-      tipo VARCHAR(2) NOT NULL CHECK (tipo IN ('PF', 'PJ')),
+      tipo VARCHAR(2) CHECK (tipo IS NULL OR tipo IN ('PF', 'PJ')),
       nome_razao VARCHAR(255) NOT NULL,
-      cpf_cnpj VARCHAR(18) UNIQUE NOT NULL,
+      cpf_cnpj VARCHAR(18),
       inscricao_estadual VARCHAR(20),
       email VARCHAR(255),
       telefone VARCHAR(20),
-      cep VARCHAR(9) NOT NULL,
-      logradouro VARCHAR(255) NOT NULL,
-      numero VARCHAR(20) NOT NULL,
+      cep VARCHAR(9),
+      logradouro VARCHAR(255),
+      numero VARCHAR(20),
       complemento VARCHAR(255),
-      bairro VARCHAR(100) NOT NULL,
-      cidade VARCHAR(100) NOT NULL,
-      uf VARCHAR(2) NOT NULL,
+      bairro VARCHAR(100),
+      cidade VARCHAR(100),
+      uf VARCHAR(2),
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
@@ -48,77 +47,53 @@ beforeAll(async () => {
     .send({ email: "teste@erp.local", senha: "teste123" });
   token = res.body.token;
 
-  // Limpa clientes de testes anteriores
   await pool.query("DELETE FROM clientes");
 });
 
-const clienteValido = {
-  tipo: "PJ",
-  nome_razao: "Gráfica Teste LTDA",
-  cpf_cnpj: "11222333000181",
-  inscricao_estadual: "123456789",
-  email: "contato@graficateste.com",
-  telefone: "(11) 99999-0000",
-  cep: "13201-000",
-  logradouro: "Rua Teste",
-  numero: "100",
-  complemento: "Sala 1",
-  bairro: "Centro",
-  cidade: "Jundiaí",
-  uf: "SP",
-};
+// ── POST /clientes (cadastro básico) ──
 
 describe("POST /clientes", () => {
   it("retorna 401 sem token", async () => {
-    const res = await request(app).post("/clientes").send(clienteValido);
+    const res = await request(app)
+      .post("/clientes")
+      .send({ nome_razao: "Teste" });
     expect(res.status).toBe(401);
   });
 
-  it("retorna 400 para campos obrigatórios ausentes", async () => {
+  it("retorna 400 sem nome_razao", async () => {
     const res = await request(app)
       .post("/clientes")
       .set("Authorization", `Bearer ${token}`)
-      .send({ tipo: "PJ" });
+      .send({ telefone: "11999990000" });
     expect(res.status).toBe(400);
   });
 
-  it("retorna 400 para CNPJ inválido", async () => {
+  it("cria cliente só com nome", async () => {
     const res = await request(app)
       .post("/clientes")
       .set("Authorization", `Bearer ${token}`)
-      .send({ ...clienteValido, cpf_cnpj: "00000000000000" });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/CNPJ inválido/);
-  });
-
-  it("retorna 400 para CPF inválido quando tipo é PF", async () => {
-    const res = await request(app)
-      .post("/clientes")
-      .set("Authorization", `Bearer ${token}`)
-      .send({ ...clienteValido, tipo: "PF", cpf_cnpj: "00000000000" });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/CPF inválido/);
-  });
-
-  it("cria cliente com dados válidos", async () => {
-    const res = await request(app)
-      .post("/clientes")
-      .set("Authorization", `Bearer ${token}`)
-      .send(clienteValido);
+      .send({ nome_razao: "Cliente Simples" });
     expect(res.status).toBe(201);
-    expect(res.body.id).toBeDefined();
-    expect(res.body.nome_razao).toBe(clienteValido.nome_razao);
-    expect(res.body.cpf_cnpj).toBe(clienteValido.cpf_cnpj);
+    expect(res.body.nome_razao).toBe("Cliente Simples");
+    expect(res.body.cpf_cnpj).toBeNull();
   });
 
-  it("retorna 409 para CNPJ duplicado", async () => {
+  it("cria cliente com nome, telefone e email", async () => {
     const res = await request(app)
       .post("/clientes")
       .set("Authorization", `Bearer ${token}`)
-      .send(clienteValido);
-    expect(res.status).toBe(409);
+      .send({
+        nome_razao: "Gráfica Teste LTDA",
+        telefone: "(11) 99999-0000",
+        email: "contato@graficateste.com",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.telefone).toBe("(11) 99999-0000");
+    expect(res.body.email).toBe("contato@graficateste.com");
   });
 });
+
+// ── GET /clientes ──
 
 describe("GET /clientes", () => {
   it("retorna lista de clientes", async () => {
@@ -136,6 +111,7 @@ describe("GET /clientes", () => {
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
+    expect(res.body[0].nome_razao).toBe("Gráfica Teste LTDA");
   });
 
   it("busca sem resultados retorna array vazio", async () => {
@@ -146,6 +122,8 @@ describe("GET /clientes", () => {
     expect(res.body.length).toBe(0);
   });
 });
+
+// ── GET /clientes/:id ──
 
 describe("GET /clientes/:id", () => {
   it("retorna 404 para ID inexistente", async () => {
@@ -169,6 +147,8 @@ describe("GET /clientes/:id", () => {
   });
 });
 
+// ── PUT /clientes/:id (dados básicos) ──
+
 describe("PUT /clientes/:id", () => {
   it("atualiza nome do cliente", async () => {
     const lista = await request(app)
@@ -179,11 +159,102 @@ describe("PUT /clientes/:id", () => {
     const res = await request(app)
       .put(`/clientes/${id}`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ nome_razao: "Gráfica Atualizada LTDA" });
+      .send({ nome_razao: "Nome Atualizado" });
     expect(res.status).toBe(200);
-    expect(res.body.nome_razao).toBe("Gráfica Atualizada LTDA");
+    expect(res.body.nome_razao).toBe("Nome Atualizado");
+  });
+
+  it("retorna 404 para ID inexistente", async () => {
+    const res = await request(app)
+      .put("/clientes/99999")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ nome_razao: "Teste" });
+    expect(res.status).toBe(404);
   });
 });
+
+// ── PUT /clientes/:id/fiscal ──
+
+describe("PUT /clientes/:id/fiscal", () => {
+  const dadosFiscais = {
+    tipo: "PJ",
+    cpf_cnpj: "11222333000181",
+    inscricao_estadual: "123456789",
+    cep: "13201-000",
+    logradouro: "Rua Teste",
+    numero: "100",
+    bairro: "Centro",
+    cidade: "Jundiaí",
+    uf: "SP",
+  };
+
+  it("retorna 400 sem campos fiscais obrigatórios", async () => {
+    const lista = await request(app)
+      .get("/clientes")
+      .set("Authorization", `Bearer ${token}`);
+    const id = lista.body[0].id;
+
+    const res = await request(app)
+      .put(`/clientes/${id}/fiscal`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ tipo: "PJ" });
+    expect(res.status).toBe(400);
+  });
+
+  it("retorna 400 para CNPJ inválido", async () => {
+    const lista = await request(app)
+      .get("/clientes")
+      .set("Authorization", `Bearer ${token}`);
+    const id = lista.body[0].id;
+
+    const res = await request(app)
+      .put(`/clientes/${id}/fiscal`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...dadosFiscais, cpf_cnpj: "00000000000000" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/CNPJ inválido/);
+  });
+
+  it("retorna 400 para CPF inválido", async () => {
+    const lista = await request(app)
+      .get("/clientes")
+      .set("Authorization", `Bearer ${token}`);
+    const id = lista.body[0].id;
+
+    const res = await request(app)
+      .put(`/clientes/${id}/fiscal`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...dadosFiscais, tipo: "PF", cpf_cnpj: "00000000000" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/CPF inválido/);
+  });
+
+  it("salva dados fiscais com sucesso", async () => {
+    const lista = await request(app)
+      .get("/clientes")
+      .set("Authorization", `Bearer ${token}`);
+    const id = lista.body[0].id;
+
+    const res = await request(app)
+      .put(`/clientes/${id}/fiscal`)
+      .set("Authorization", `Bearer ${token}`)
+      .send(dadosFiscais);
+    expect(res.status).toBe(200);
+    expect(res.body.tipo).toBe("PJ");
+    expect(res.body.cpf_cnpj).toBe("11222333000181");
+    expect(res.body.cidade).toBe("Jundiaí");
+  });
+
+  it("retorna 404 para ID inexistente", async () => {
+    const res = await request(app)
+      .put("/clientes/99999/fiscal")
+      .set("Authorization", `Bearer ${token}`)
+      .send(dadosFiscais);
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── DELETE /clientes/:id ──
 
 describe("DELETE /clientes/:id", () => {
   it("remove cliente existente", async () => {
