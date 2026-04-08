@@ -6,13 +6,21 @@ import Header from "@/components/Header";
 import { api } from "@/lib/api";
 import {
   Cliente,
-  CreateClienteDTO,
   TipoCliente,
   validarDocumento,
   formatarCPF,
   formatarCNPJ,
+  clientePossuiDadosFiscais,
 } from "@erp/shared";
-import { Plus, Search, Pencil, Trash2, X } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  X,
+  FileText,
+  AlertTriangle,
+} from "lucide-react";
 
 const UFS = [
   "AC",
@@ -44,30 +52,34 @@ const UFS = [
   "TO",
 ];
 
-const emptyForm: CreateClienteDTO = {
-  tipo: TipoCliente.PJ,
-  nome_razao: "",
-  cpf_cnpj: "",
-  inscricao_estadual: "",
-  email: "",
-  telefone: "",
-  cep: "",
-  logradouro: "",
-  numero: "",
-  complemento: "",
-  bairro: "",
-  cidade: "",
-  uf: "SP",
-};
+type ModalMode = null | "create" | "edit" | "fiscal";
 
 export default function ClientesPage() {
   const { data: session } = useSession();
   const apiToken = (session as any)?.apiToken;
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busca, setBusca] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<CreateClienteDTO>(emptyForm);
+  const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
+
+  // Form básico
+  const [nome, setNome] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [email, setEmail] = useState("");
+
+  // Form fiscal
+  const [tipo, setTipo] = useState<string>("PJ");
+  const [cpfCnpj, setCpfCnpj] = useState("");
+  const [ie, setIe] = useState("");
+  const [cep, setCep] = useState("");
+  const [logradouro, setLogradouro] = useState("");
+  const [numero, setNumero] = useState("");
+  const [complemento, setComplemento] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("SP");
+
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -90,31 +102,42 @@ export default function ClientesPage() {
   }, [busca, apiToken]);
 
   function openCreate() {
-    setForm(emptyForm);
-    setEditingId(null);
+    setNome("");
+    setTelefone("");
+    setEmail("");
     setErro("");
-    setModalOpen(true);
+    setSelectedCliente(null);
+    setModalMode("create");
   }
 
-  function openEdit(cliente: Cliente) {
-    setForm({
-      tipo: cliente.tipo as TipoCliente,
-      nome_razao: cliente.nome_razao,
-      cpf_cnpj: cliente.cpf_cnpj,
-      inscricao_estadual: cliente.inscricao_estadual || "",
-      email: cliente.email || "",
-      telefone: cliente.telefone || "",
-      cep: cliente.cep,
-      logradouro: cliente.logradouro,
-      numero: cliente.numero,
-      complemento: cliente.complemento || "",
-      bairro: cliente.bairro,
-      cidade: cliente.cidade,
-      uf: cliente.uf,
-    });
-    setEditingId(cliente.id);
+  function openEdit(c: Cliente) {
+    setNome(c.nome_razao);
+    setTelefone(c.telefone || "");
+    setEmail(c.email || "");
     setErro("");
-    setModalOpen(true);
+    setSelectedCliente(c);
+    setModalMode("edit");
+  }
+
+  function openFiscal(c: Cliente) {
+    setTipo(c.tipo || "PJ");
+    setCpfCnpj(c.cpf_cnpj || "");
+    setIe(c.inscricao_estadual || "");
+    setCep(c.cep || "");
+    setLogradouro(c.logradouro || "");
+    setNumero(c.numero || "");
+    setComplemento(c.complemento || "");
+    setBairro(c.bairro || "");
+    setCidade(c.cidade || "");
+    setUf(c.uf || "SP");
+    setErro("");
+    setSelectedCliente(c);
+    setModalMode("fiscal");
+  }
+
+  function closeModal() {
+    setModalMode(null);
+    setSelectedCliente(null);
   }
 
   async function handleDelete(id: number) {
@@ -127,31 +150,32 @@ export default function ClientesPage() {
     }
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmitBasico(e: FormEvent) {
     e.preventDefault();
     setErro("");
-
-    if (!validarDocumento(form.cpf_cnpj, form.tipo)) {
-      setErro(`${form.tipo === "PF" ? "CPF" : "CNPJ"} inválido`);
-      return;
-    }
-
     setLoading(true);
+
     try {
-      if (editingId) {
-        await api(`/clientes/${editingId}`, {
-          method: "PUT",
-          body: JSON.stringify(form),
+      if (modalMode === "edit" && selectedCliente) {
+        await api(
+          `/clientes/${selectedCliente.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({ nome_razao: nome, telefone, email }),
+          },
           apiToken,
-        });
+        );
       } else {
-        await api("/clientes", {
-          method: "POST",
-          body: JSON.stringify(form),
+        await api(
+          "/clientes",
+          {
+            method: "POST",
+            body: JSON.stringify({ nome_razao: nome, telefone, email }),
+          },
           apiToken,
-        });
+        );
       }
-      setModalOpen(false);
+      closeModal();
       fetchClientes();
     } catch (err: any) {
       setErro(err.message);
@@ -160,11 +184,47 @@ export default function ClientesPage() {
     }
   }
 
-  function updateForm(field: keyof CreateClienteDTO, value: string) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  async function handleSubmitFiscal(e: FormEvent) {
+    e.preventDefault();
+    setErro("");
+
+    if (!validarDocumento(cpfCnpj, tipo as "PF" | "PJ")) {
+      setErro(`${tipo === "PF" ? "CPF" : "CNPJ"} inválido`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api(
+        `/clientes/${selectedCliente!.id}/fiscal`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            tipo,
+            cpf_cnpj: cpfCnpj,
+            inscricao_estadual: ie,
+            cep,
+            logradouro,
+            numero,
+            complemento,
+            bairro,
+            cidade,
+            uf,
+          }),
+        },
+        apiToken,
+      );
+      closeModal();
+      fetchClientes();
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function formatDoc(doc: string, tipo: string) {
+  function formatDoc(doc: string | null, tipo: string | null) {
+    if (!doc) return "—";
     return tipo === "PF" ? formatarCPF(doc) : formatarCNPJ(doc);
   }
 
@@ -181,7 +241,7 @@ export default function ClientesPage() {
             />
             <input
               type="text"
-              placeholder="Buscar por nome, CPF/CNPJ ou e-mail..."
+              placeholder="Buscar por nome, telefone ou e-mail..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-brand-400 focus:ring-1 focus:ring-brand-400"
@@ -196,25 +256,22 @@ export default function ClientesPage() {
           </button>
         </div>
 
-        {/* Table */}
+        {/* Tabela */}
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  Nome / Razão Social
+                  Nome
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  Tipo
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  CPF/CNPJ
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  Cidade/UF
+                  Telefone
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">
                   E-mail
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">
+                  Fiscal
                 </th>
                 <th className="px-4 py-3 text-right font-medium text-gray-500">
                   Ações
@@ -225,92 +282,187 @@ export default function ClientesPage() {
               {clientes.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-4 py-12 text-center text-gray-400"
                   >
                     Nenhum cliente encontrado.
                   </td>
                 </tr>
               ) : (
-                clientes.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="border-b border-gray-50 transition hover:bg-gray-50/50"
-                  >
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {c.nome_razao}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                          c.tipo === "PJ"
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-emerald-50 text-emerald-700"
-                        }`}
-                      >
-                        {c.tipo}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-gray-600">
-                      {formatDoc(c.cpf_cnpj, c.tipo)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {c.cidade}/{c.uf}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {c.email || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex gap-1">
-                        <button
-                          onClick={() => openEdit(c)}
-                          className="rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
-                          title="Editar"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(c.id)}
-                          className="rounded-md p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
-                          title="Remover"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                clientes.map((c) => {
+                  const fiscal = clientePossuiDadosFiscais(c);
+                  return (
+                    <tr
+                      key={c.id}
+                      className="border-b border-gray-50 transition hover:bg-gray-50/50"
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {c.nome_razao}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {c.telefone || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {c.email || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {fiscal ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            <FileText size={12} />
+                            {c.tipo} —{" "}
+                            {formatDoc(c.cpf_cnpj ?? null, c.tipo ?? null)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            <AlertTriangle size={12} />
+                            Incompleto
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex gap-1">
+                          <button
+                            onClick={() => openFiscal(c)}
+                            className="rounded-md p-1.5 text-gray-400 transition hover:bg-blue-50 hover:text-blue-600"
+                            title="Dados Fiscais"
+                          >
+                            <FileText size={15} />
+                          </button>
+                          <button
+                            onClick={() => openEdit(c)}
+                            className="rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                            title="Editar"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(c.id)}
+                            className="rounded-md p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                            title="Remover"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal */}
-      {modalOpen && (
+      {/* Modal Cadastro / Edição */}
+      {(modalMode === "create" || modalMode === "edit") && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-12 backdrop-blur-sm">
-          <div className="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
+          <div className="relative w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
             <button
-              onClick={() => setModalOpen(false)}
+              onClick={closeModal}
               className="absolute right-4 top-4 rounded-md p-1 text-gray-400 hover:text-gray-600"
             >
               <X size={18} />
             </button>
 
             <h2 className="mb-5 text-lg font-semibold text-gray-900">
-              {editingId ? "Editar Cliente" : "Novo Cliente"}
+              {modalMode === "edit" ? "Editar Cliente" : "Novo Cliente"}
             </h2>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Tipo + Doc */}
+            <form onSubmit={handleSubmitBasico} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  Nome / Razão Social *
+                </label>
+                <input
+                  type="text"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  Telefone
+                </label>
+                <input
+                  type="text"
+                  value={telefone}
+                  onChange={(e) => setTelefone(e.target.value)}
+                  placeholder="(00) 00000-0000"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  E-mail
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
+                />
+              </div>
+
+              {erro && (
+                <div className="rounded-lg bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
+                  {erro}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                >
+                  {loading
+                    ? "Salvando..."
+                    : modalMode === "edit"
+                      ? "Salvar"
+                      : "Cadastrar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dados Fiscais */}
+      {modalMode === "fiscal" && selectedCliente && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-12 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
+            <button
+              onClick={closeModal}
+              className="absolute right-4 top-4 rounded-md p-1 text-gray-400 hover:text-gray-600"
+            >
+              <X size={18} />
+            </button>
+
+            <h2 className="mb-1 text-lg font-semibold text-gray-900">
+              Dados Fiscais
+            </h2>
+            <p className="mb-5 text-sm text-gray-400">
+              {selectedCliente.nome_razao}
+            </p>
+
+            <form onSubmit={handleSubmitFiscal} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-500">
                     Tipo *
                   </label>
                   <select
-                    value={form.tipo}
-                    onChange={(e) => updateForm("tipo", e.target.value)}
+                    value={tipo}
+                    onChange={(e) => setTipo(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400"
                   >
                     <option value="PJ">Pessoa Jurídica</option>
@@ -319,77 +471,33 @@ export default function ClientesPage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-500">
-                    {form.tipo === "PF" ? "CPF" : "CNPJ"} *
+                    {tipo === "PF" ? "CPF" : "CNPJ"} *
                   </label>
                   <input
                     type="text"
-                    value={form.cpf_cnpj}
-                    onChange={(e) => updateForm("cpf_cnpj", e.target.value)}
+                    value={cpfCnpj}
+                    onChange={(e) => setCpfCnpj(e.target.value)}
                     required
                     placeholder={
-                      form.tipo === "PF"
-                        ? "000.000.000-00"
-                        : "00.000.000/0000-00"
+                      tipo === "PF" ? "000.000.000-00" : "00.000.000/0000-00"
                     }
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                   />
                 </div>
               </div>
 
-              {/* Nome */}
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-500">
-                  {form.tipo === "PF" ? "Nome Completo" : "Razão Social"} *
+                  Inscrição Estadual
                 </label>
                 <input
                   type="text"
-                  value={form.nome_razao}
-                  onChange={(e) => updateForm("nome_razao", e.target.value)}
-                  required
+                  value={ie}
+                  onChange={(e) => setIe(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                 />
               </div>
 
-              {/* IE + Email + Telefone */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-500">
-                    IE
-                  </label>
-                  <input
-                    type="text"
-                    value={form.inscricao_estadual || ""}
-                    onChange={(e) =>
-                      updateForm("inscricao_estadual", e.target.value)
-                    }
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-500">
-                    E-mail
-                  </label>
-                  <input
-                    type="email"
-                    value={form.email || ""}
-                    onChange={(e) => updateForm("email", e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-500">
-                    Telefone
-                  </label>
-                  <input
-                    type="text"
-                    value={form.telefone || ""}
-                    onChange={(e) => updateForm("telefone", e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
-                  />
-                </div>
-              </div>
-
-              {/* Endereço */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-500">
@@ -397,8 +505,8 @@ export default function ClientesPage() {
                   </label>
                   <input
                     type="text"
-                    value={form.cep}
-                    onChange={(e) => updateForm("cep", e.target.value)}
+                    value={cep}
+                    onChange={(e) => setCep(e.target.value)}
                     required
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                   />
@@ -409,8 +517,8 @@ export default function ClientesPage() {
                   </label>
                   <input
                     type="text"
-                    value={form.logradouro}
-                    onChange={(e) => updateForm("logradouro", e.target.value)}
+                    value={logradouro}
+                    onChange={(e) => setLogradouro(e.target.value)}
                     required
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                   />
@@ -424,8 +532,8 @@ export default function ClientesPage() {
                   </label>
                   <input
                     type="text"
-                    value={form.numero}
-                    onChange={(e) => updateForm("numero", e.target.value)}
+                    value={numero}
+                    onChange={(e) => setNumero(e.target.value)}
                     required
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                   />
@@ -436,8 +544,8 @@ export default function ClientesPage() {
                   </label>
                   <input
                     type="text"
-                    value={form.complemento || ""}
-                    onChange={(e) => updateForm("complemento", e.target.value)}
+                    value={complemento}
+                    onChange={(e) => setComplemento(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                   />
                 </div>
@@ -447,8 +555,8 @@ export default function ClientesPage() {
                   </label>
                   <input
                     type="text"
-                    value={form.bairro}
-                    onChange={(e) => updateForm("bairro", e.target.value)}
+                    value={bairro}
+                    onChange={(e) => setBairro(e.target.value)}
                     required
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                   />
@@ -458,13 +566,13 @@ export default function ClientesPage() {
                     UF *
                   </label>
                   <select
-                    value={form.uf}
-                    onChange={(e) => updateForm("uf", e.target.value)}
+                    value={uf}
+                    onChange={(e) => setUf(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400"
                   >
-                    {UFS.map((uf) => (
-                      <option key={uf} value={uf}>
-                        {uf}
+                    {UFS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
                       </option>
                     ))}
                   </select>
@@ -477,8 +585,8 @@ export default function ClientesPage() {
                 </label>
                 <input
                   type="text"
-                  value={form.cidade}
-                  onChange={(e) => updateForm("cidade", e.target.value)}
+                  value={cidade}
+                  onChange={(e) => setCidade(e.target.value)}
                   required
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
                 />
@@ -493,7 +601,7 @@ export default function ClientesPage() {
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
+                  onClick={closeModal}
                   className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
                 >
                   Cancelar
@@ -503,7 +611,7 @@ export default function ClientesPage() {
                   disabled={loading}
                   className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
                 >
-                  {loading ? "Salvando..." : editingId ? "Salvar" : "Cadastrar"}
+                  {loading ? "Salvando..." : "Salvar Dados Fiscais"}
                 </button>
               </div>
             </form>

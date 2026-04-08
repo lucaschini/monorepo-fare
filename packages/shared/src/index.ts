@@ -7,3 +7,4 @@ export * from "./types/usuario";
 
 // Validators
 export * from "./validators/documento";
+export * from "./validators/fiscal";

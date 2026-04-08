@@ -29,8 +29,8 @@ export async function up() {
       updated_at TIMESTAMP DEFAULT NOW()
     );
 
-    CREATE INDEX idx_clientes_cpf_cnpj ON clientes(cpf_cnpj);
-    CREATE INDEX idx_clientes_nome ON clientes(nome_razao);
+    CREATE INDEX IF NOT EXISTS idx_clientes_cpf_cnpj ON clientes(cpf_cnpj);
+    CREATE INDEX IF NOT EXISTS idx_clientes_nome ON clientes(nome_razao);
   `);
 
   console.log("✅ Migration 001: tabelas usuarios e clientes criadas");

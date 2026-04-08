@@ -7,7 +7,7 @@ const router = Router();
 
 router.use(authMiddleware);
 
-// Listar clientes (com busca)
+// Listar clientes
 router.get("/", async (req: AuthRequest, res: Response) => {
   try {
     const { busca, tipo } = req.query;
@@ -16,7 +16,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     let paramIndex = 1;
 
     if (busca) {
-      sql += ` AND (nome_razao ILIKE $${paramIndex} OR cpf_cnpj ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`;
+      sql += ` AND (nome_razao ILIKE $${paramIndex} OR cpf_cnpj ILIKE $${paramIndex} OR email ILIKE $${paramIndex} OR telefone ILIKE $${paramIndex})`;
       params.push(`%${busca}%`);
       paramIndex++;
     }
@@ -37,10 +37,62 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Buscar cliente por ID
+// Buscar por ID
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   try {
-    const result = await query("SELECT * FROM clientes WHERE id = $1", [req.params.id]);
+    const result = await query("SELECT * FROM clientes WHERE id = $1", [
+      req.params.id,
+    ]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: "Cliente não encontrado" });
+      return;
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Erro ao buscar cliente:", error);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+// Criar cliente (dados básicos)
+router.post("/", async (req: AuthRequest, res: Response) => {
+  try {
+    const { nome_razao, telefone, email } = req.body;
+
+    if (!nome_razao) {
+      res.status(400).json({ error: "Campo obrigatório: nome_razao" });
+      return;
+    }
+
+    const result = await query(
+      `INSERT INTO clientes (nome_razao, telefone, email)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [nome_razao, telefone || null, email || null],
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Erro ao criar cliente:", error);
+    res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+// Atualizar dados básicos
+router.put("/:id", async (req: AuthRequest, res: Response) => {
+  try {
+    const { nome_razao, telefone, email } = req.body;
+
+    const result = await query(
+      `UPDATE clientes SET
+        nome_razao = COALESCE($1, nome_razao),
+        telefone = COALESCE($2, telefone),
+        email = COALESCE($3, email),
+        updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [nome_razao, telefone, email, req.params.id],
+    );
 
     if (result.rows.length === 0) {
       res.status(404).json({ error: "Cliente não encontrado" });
@@ -49,23 +101,41 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error("Erro ao buscar cliente:", error);
+    console.error("Erro ao atualizar cliente:", error);
     res.status(500).json({ error: "Erro interno" });
   }
 });
 
-// Criar cliente
-router.post("/", async (req: AuthRequest, res: Response) => {
+// Salvar dados fiscais
+router.put("/:id/fiscal", async (req: AuthRequest, res: Response) => {
   try {
     const {
-      tipo, nome_razao, cpf_cnpj, inscricao_estadual,
-      email, telefone, cep, logradouro, numero,
-      complemento, bairro, cidade, uf,
+      tipo,
+      cpf_cnpj,
+      inscricao_estadual,
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      cidade,
+      uf,
     } = req.body;
 
-    // Validações
-    if (!tipo || !nome_razao || !cpf_cnpj || !cep || !logradouro || !numero || !bairro || !cidade || !uf) {
-      res.status(400).json({ error: "Campos obrigatórios: tipo, nome_razao, cpf_cnpj, cep, logradouro, numero, bairro, cidade, uf" });
+    if (
+      !tipo ||
+      !cpf_cnpj ||
+      !cep ||
+      !logradouro ||
+      !numero ||
+      !bairro ||
+      !cidade ||
+      !uf
+    ) {
+      res.status(400).json({
+        error:
+          "Dados fiscais obrigatórios: tipo, cpf_cnpj, cep, logradouro, numero, bairro, cidade, uf",
+      });
       return;
     }
 
@@ -75,61 +145,32 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     }
 
     if (!validarDocumento(cpf_cnpj, tipo)) {
-      res.status(400).json({ error: `${tipo === "PF" ? "CPF" : "CNPJ"} inválido` });
-      return;
-    }
-
-    const result = await query(
-      `INSERT INTO clientes (tipo, nome_razao, cpf_cnpj, inscricao_estadual, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, uf)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-       RETURNING *`,
-      [tipo, nome_razao, cpf_cnpj, inscricao_estadual, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, uf]
-    );
-
-    res.status(201).json(result.rows[0]);
-  } catch (error: any) {
-    if (error.code === "23505") {
-      res.status(409).json({ error: "CPF/CNPJ já cadastrado" });
-      return;
-    }
-    console.error("Erro ao criar cliente:", error);
-    res.status(500).json({ error: "Erro interno" });
-  }
-});
-
-// Atualizar cliente
-router.put("/:id", async (req: AuthRequest, res: Response) => {
-  try {
-    const {
-      tipo, nome_razao, cpf_cnpj, inscricao_estadual,
-      email, telefone, cep, logradouro, numero,
-      complemento, bairro, cidade, uf,
-    } = req.body;
-
-    if (tipo && cpf_cnpj && !validarDocumento(cpf_cnpj, tipo)) {
-      res.status(400).json({ error: `${tipo === "PF" ? "CPF" : "CNPJ"} inválido` });
+      res
+        .status(400)
+        .json({ error: `${tipo === "PF" ? "CPF" : "CNPJ"} inválido` });
       return;
     }
 
     const result = await query(
       `UPDATE clientes SET
-        tipo = COALESCE($1, tipo),
-        nome_razao = COALESCE($2, nome_razao),
-        cpf_cnpj = COALESCE($3, cpf_cnpj),
-        inscricao_estadual = COALESCE($4, inscricao_estadual),
-        email = COALESCE($5, email),
-        telefone = COALESCE($6, telefone),
-        cep = COALESCE($7, cep),
-        logradouro = COALESCE($8, logradouro),
-        numero = COALESCE($9, numero),
-        complemento = COALESCE($10, complemento),
-        bairro = COALESCE($11, bairro),
-        cidade = COALESCE($12, cidade),
-        uf = COALESCE($13, uf),
-        updated_at = NOW()
-       WHERE id = $14
+        tipo = $1, cpf_cnpj = $2, inscricao_estadual = $3,
+        cep = $4, logradouro = $5, numero = $6, complemento = $7,
+        bairro = $8, cidade = $9, uf = $10, updated_at = NOW()
+       WHERE id = $11
        RETURNING *`,
-      [tipo, nome_razao, cpf_cnpj, inscricao_estadual, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, uf, req.params.id]
+      [
+        tipo,
+        cpf_cnpj,
+        inscricao_estadual || null,
+        cep,
+        logradouro,
+        numero,
+        complemento || null,
+        bairro,
+        cidade,
+        uf,
+        req.params.id,
+      ],
     );
 
     if (result.rows.length === 0) {
@@ -140,10 +181,12 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
     res.json(result.rows[0]);
   } catch (error: any) {
     if (error.code === "23505") {
-      res.status(409).json({ error: "CPF/CNPJ já cadastrado" });
+      res
+        .status(409)
+        .json({ error: "CPF/CNPJ já cadastrado para outro cliente" });
       return;
     }
-    console.error("Erro ao atualizar cliente:", error);
+    console.error("Erro ao salvar dados fiscais:", error);
     res.status(500).json({ error: "Erro interno" });
   }
 });
@@ -151,13 +194,14 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
 // Deletar cliente
 router.delete("/:id", async (req: AuthRequest, res: Response) => {
   try {
-    const result = await query("DELETE FROM clientes WHERE id = $1 RETURNING id", [req.params.id]);
-
+    const result = await query(
+      "DELETE FROM clientes WHERE id = $1 RETURNING id",
+      [req.params.id],
+    );
     if (result.rows.length === 0) {
       res.status(404).json({ error: "Cliente não encontrado" });
       return;
     }
-
     res.json({ message: "Cliente removido com sucesso" });
   } catch (error) {
     console.error("Erro ao deletar cliente:", error);

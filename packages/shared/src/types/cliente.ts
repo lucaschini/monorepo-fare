@@ -2,30 +2,34 @@ import { TipoCliente } from "../enums";
 
 export interface Cliente {
   id: number;
-  tipo: TipoCliente;
   nome_razao: string;
-  cpf_cnpj: string;
-  inscricao_estadual?: string | null;
-  email?: string | null;
   telefone?: string | null;
-  cep: string;
-  logradouro: string;
-  numero: string;
+  email?: string | null;
+  // Dados fiscais
+  tipo?: TipoCliente | null;
+  cpf_cnpj?: string | null;
+  inscricao_estadual?: string | null;
+  cep?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
   complemento?: string | null;
-  bairro: string;
-  cidade: string;
-  uf: string;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateClienteDTO {
-  tipo: TipoCliente;
   nome_razao: string;
+  telefone?: string | null;
+  email?: string | null;
+}
+
+export interface DadosFiscaisDTO {
+  tipo: TipoCliente;
   cpf_cnpj: string;
   inscricao_estadual?: string | null;
-  email?: string | null;
-  telefone?: string | null;
   cep: string;
   logradouro: string;
   numero: string;
@@ -35,4 +39,6 @@ export interface CreateClienteDTO {
   uf: string;
 }
 
-export interface UpdateClienteDTO extends Partial<CreateClienteDTO> {}
+export interface UpdateClienteDTO extends Partial<
+  CreateClienteDTO & DadosFiscaisDTO
+> {}
