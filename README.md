@@ -150,11 +150,4 @@ Abra `http://localhost:3000` e faça login com:
 | `DELETE` | `/clientes/:id` | Remover cliente | Sim |
 | `GET` | `/health` | Health check | Não |
 
-## Credenciais padrão
 
-```
-Email: admin@erp.local
-Senha: admin123
-```
-
-> ⚠️ Altere o `JWT_SECRET` e a senha do admin antes de ir para produção.
