@@ -5,6 +5,8 @@ import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth";
 import clientesRoutes from "./routes/clientes";
 import catalogoRoutes from "./routes/catalogo";
+import orcamentosRoutes from "./routes/orcamentos";
+import pedidosRoutes from "./routes/pedidos";
 
 const app = express();
 
@@ -38,6 +40,8 @@ app.use("/auth/login", loginLimiter);
 app.use("/auth", authRoutes);
 app.use("/clientes", clientesRoutes);
 app.use("/catalogo", catalogoRoutes);
+app.use("/orcamentos", orcamentosRoutes);
+app.use("/pedidos", pedidosRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {

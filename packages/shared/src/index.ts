@@ -5,6 +5,8 @@ export * from "./enums";
 export * from "./types/cliente";
 export * from "./types/usuario";
 export * from "./types/catalogo";
+export * from "./types/orcamento";
+export * from "./types/pedido";
 
 // Validators
 export * from "./validators/documento";

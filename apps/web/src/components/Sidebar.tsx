@@ -3,12 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Users, LayoutDashboard, LogOut, BookOpen } from "lucide-react";
+import {
+  Users,
+  LayoutDashboard,
+  LogOut,
+  BookOpen,
+  FileText,
+  ClipboardList,
+} from "lucide-react";
 
 const navItems = [
   { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/catalogo", label: "Catálogo", icon: BookOpen },
+  { href: "/orcamentos", label: "Orçamentos", icon: FileText },
+  { href: "/pedidos", label: "Pedidos", icon: ClipboardList },
 ];
 
 export default function Sidebar() {

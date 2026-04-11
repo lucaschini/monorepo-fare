@@ -40,6 +40,8 @@ beforeAll(async () => {
     .send({ email: "teste@erp.local", senha: "teste123" });
   token = res.body.token;
 
+  await pool.query("DELETE FROM pedido_itens");
+  await pool.query("DELETE FROM orcamento_itens");
   await pool.query("DELETE FROM catalogo");
 });
 
