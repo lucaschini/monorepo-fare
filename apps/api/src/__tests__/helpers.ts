@@ -6,6 +6,7 @@ import { pool } from "../db/connection";
  */
 export async function cleanDatabase() {
   await pool.query(`
+    DELETE FROM notas_fiscais;
     DELETE FROM movimentacoes_estoque;
     DELETE FROM pedido_itens;
     DELETE FROM orcamento_itens;

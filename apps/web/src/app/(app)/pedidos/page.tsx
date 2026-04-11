@@ -847,6 +847,35 @@ export default function PedidosPage() {
                   <t.icon size={14} /> {t.label}
                 </button>
               ))}
+              {detail.status === "pronto" && (
+                <button
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        "Registrar entrega deste pedido? Isso criará nota(s) fiscal(is) pendente(s).",
+                      )
+                    )
+                      return;
+                    try {
+                      const res = await api<{ notas_pendentes: number }>(
+                        `/pedidos/${detail.id}/entregar`,
+                        { method: "POST" },
+                        apiToken,
+                      );
+                      alert(
+                        `Entrega registrada! ${res.notas_pendentes} nota(s) fiscal(is) criada(s) como pendente(s).`,
+                      );
+                      fetchPedidos();
+                      setDetail(null);
+                    } catch (err: any) {
+                      alert(err.message);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+                >
+                  <Truck size={14} /> Registrar Entrega
+                </button>
+              )}
             </div>
           </div>
         </div>

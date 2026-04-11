@@ -8,6 +8,7 @@ export * from "./types/catalogo";
 export * from "./types/orcamento";
 export * from "./types/pedido";
 export * from "./types/estoque";
+export * from "./types/nota";
 
 // Validators
 export * from "./validators/documento";

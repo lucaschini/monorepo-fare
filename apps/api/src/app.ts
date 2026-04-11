@@ -8,6 +8,8 @@ import catalogoRoutes from "./routes/catalogo";
 import orcamentosRoutes from "./routes/orcamentos";
 import pedidosRoutes from "./routes/pedidos";
 import estoqueRoutes from "./routes/estoque";
+import entregasRoutes from "./routes/entregas";
+import notasRoutes from "./routes/notas";
 
 const app = express();
 
@@ -44,6 +46,8 @@ app.use("/catalogo", catalogoRoutes);
 app.use("/orcamentos", orcamentosRoutes);
 app.use("/pedidos", pedidosRoutes);
 app.use("/estoque", estoqueRoutes);
+app.use("/pedidos", entregasRoutes);
+app.use("/fiscal/notas", notasRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
