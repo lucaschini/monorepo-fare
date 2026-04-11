@@ -7,6 +7,7 @@ import clientesRoutes from "./routes/clientes";
 import catalogoRoutes from "./routes/catalogo";
 import orcamentosRoutes from "./routes/orcamentos";
 import pedidosRoutes from "./routes/pedidos";
+import estoqueRoutes from "./routes/estoque";
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use("/clientes", clientesRoutes);
 app.use("/catalogo", catalogoRoutes);
 app.use("/orcamentos", orcamentosRoutes);
 app.use("/pedidos", pedidosRoutes);
+app.use("/estoque", estoqueRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {

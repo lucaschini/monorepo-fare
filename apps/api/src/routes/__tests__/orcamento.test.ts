@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import app from "../../app";
 import { pool } from "../../db/connection";
+import { cleanDatabase } from "../../__tests__/helpers";
 import bcrypt from "bcryptjs";
 
 let token: string;
@@ -34,10 +35,7 @@ beforeAll(async () => {
   token = login.body.token;
 
   // Clean
-  await pool.query("DELETE FROM pedido_itens");
-  await pool.query("DELETE FROM pedidos");
-  await pool.query("DELETE FROM orcamento_itens");
-  await pool.query("DELETE FROM orcamentos");
+  await cleanDatabase();
 
   // Cliente
   const c = await request(app)

@@ -10,6 +10,7 @@ import {
   BookOpen,
   FileText,
   ClipboardList,
+  Warehouse,
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/catalogo", label: "Catálogo", icon: BookOpen },
   { href: "/orcamentos", label: "Orçamentos", icon: FileText },
   { href: "/pedidos", label: "Pedidos", icon: ClipboardList },
+  { href: "/estoque", label: "Estoque", icon: Warehouse },
 ];
 
 export default function Sidebar() {

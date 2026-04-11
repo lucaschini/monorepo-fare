@@ -7,6 +7,7 @@ export * from "./types/usuario";
 export * from "./types/catalogo";
 export * from "./types/orcamento";
 export * from "./types/pedido";
+export * from "./types/estoque";
 
 // Validators
 export * from "./validators/documento";

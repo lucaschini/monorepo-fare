@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import app from "../../app";
 import { pool } from "../../db/connection";
+import { cleanDatabase } from "../../__tests__/helpers";
 import bcrypt from "bcryptjs";
 
 let token: string;
@@ -47,11 +48,7 @@ beforeAll(async () => {
     .send({ email: "teste@erp.local", senha: "teste123" });
   token = res.body.token;
 
-  await pool.query("DELETE FROM pedido_itens");
-  await pool.query("DELETE FROM orcamento_itens");
-  await pool.query("DELETE FROM pedidos");
-  await pool.query("DELETE FROM orcamentos");
-  await pool.query("DELETE FROM clientes");
+  await cleanDatabase();
 });
 
 // ── POST /clientes (cadastro básico) ──
