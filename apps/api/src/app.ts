@@ -10,6 +10,7 @@ import pedidosRoutes from "./routes/pedidos";
 import estoqueRoutes from "./routes/estoque";
 import entregasRoutes from "./routes/entregas";
 import notasRoutes from "./routes/notas";
+import financeiroRoutes from "./routes/financeiro";
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use("/pedidos", pedidosRoutes);
 app.use("/estoque", estoqueRoutes);
 app.use("/pedidos", entregasRoutes);
 app.use("/fiscal/notas", notasRoutes);
+app.use("/financeiro", financeiroRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {

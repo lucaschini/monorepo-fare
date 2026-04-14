@@ -15,7 +15,7 @@ beforeAll(async () => {
     CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, nome VARCHAR(255) NOT NULL, email VARCHAR(255) UNIQUE NOT NULL, senha_hash VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, tipo VARCHAR(2), nome_razao VARCHAR(255) NOT NULL, cpf_cnpj VARCHAR(18), inscricao_estadual VARCHAR(20), email VARCHAR(255), telefone VARCHAR(20), cep VARCHAR(9), logradouro VARCHAR(255), numero VARCHAR(20), complemento VARCHAR(255), bairro VARCHAR(100), cidade VARCHAR(100), uf VARCHAR(2), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS catalogo (id SERIAL PRIMARY KEY, nome VARCHAR(255) NOT NULL, descricao TEXT, tipo VARCHAR(10) NOT NULL CHECK (tipo IN ('produto', 'servico')), unidade VARCHAR(20) NOT NULL, preco_unitario NUMERIC(12,2) NOT NULL DEFAULT 0, codigo_fiscal VARCHAR(20), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS pedidos (id SERIAL PRIMARY KEY, cliente_id INTEGER NOT NULL REFERENCES clientes(id), orcamento_id INTEGER, status VARCHAR(30) NOT NULL DEFAULT 'aberto', valor_total NUMERIC(12,2) NOT NULL DEFAULT 0, prazo_entrega DATE, observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS pedidos (id SERIAL PRIMARY KEY, cliente_id INTEGER NOT NULL REFERENCES clientes(id), orcamento_id INTEGER, status VARCHAR(30) NOT NULL DEFAULT 'em_aberto', valor_total NUMERIC(12,2) NOT NULL DEFAULT 0, prazo_entrega DATE, observacoes TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS pedido_itens (id SERIAL PRIMARY KEY, pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE, catalogo_id INTEGER NOT NULL REFERENCES catalogo(id), quantidade NUMERIC(12,3) NOT NULL DEFAULT 1, preco_unitario NUMERIC(12,2) NOT NULL DEFAULT 0, subtotal NUMERIC(12,2) NOT NULL DEFAULT 0, especificacoes TEXT);
   `);
 
@@ -87,7 +87,7 @@ describe("POST /pedidos", () => {
         ],
       });
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe("aberto");
+    expect(res.body.status).toBe("em_aberto");
     expect(parseFloat(res.body.valor_total)).toBe(800);
     expect(res.body.itens.length).toBe(1);
     expect(res.body.itens[0].especificacoes).toBe("Lona 440g");
@@ -107,9 +107,9 @@ describe("GET /pedidos", () => {
 
   it("filtra por status", async () => {
     const res = await request(app)
-      .get("/pedidos?status=aberto")
+      .get("/pedidos?status=em_aberto")
       .set("Authorization", `Bearer ${token}`);
-    expect(res.body.every((p: any) => p.status === "aberto")).toBe(true);
+    expect(res.body.every((p: any) => p.status === "em_aberto")).toBe(true);
   });
 
   it("busca por número", async () => {
@@ -147,15 +147,15 @@ describe("GET /pedidos/:id", () => {
 });
 
 describe("PUT /pedidos/:id/status — fluxo completo", () => {
-  it("rejeita transição inválida aberto → pronto", async () => {
+  it("rejeita transição inválida em_aberto → entregue", async () => {
     const res = await request(app)
       .put(`/pedidos/${pedidoId}/status`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ status: "pronto" });
+      .send({ status: "entregue" });
     expect(res.status).toBe(400);
   });
 
-  it("aberto → em_producao", async () => {
+  it("em_aberto → em_producao", async () => {
     const res = await request(app)
       .put(`/pedidos/${pedidoId}/status`)
       .set("Authorization", `Bearer ${token}`)
@@ -164,34 +164,25 @@ describe("PUT /pedidos/:id/status — fluxo completo", () => {
     expect(res.body.status).toBe("em_producao");
   });
 
-  it("em_producao → aguardando_material", async () => {
+  it("em_producao → aguardando_retirada", async () => {
     const res = await request(app)
       .put(`/pedidos/${pedidoId}/status`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ status: "aguardando_material" });
+      .send({ status: "aguardando_retirada" });
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("aguardando_material");
+    expect(res.body.status).toBe("aguardando_retirada");
   });
 
-  it("aguardando_material → em_producao", async () => {
+  it("aguardando_retirada → em_transporte", async () => {
     const res = await request(app)
       .put(`/pedidos/${pedidoId}/status`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ status: "em_producao" });
+      .send({ status: "em_transporte" });
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("em_producao");
+    expect(res.body.status).toBe("em_transporte");
   });
 
-  it("em_producao → pronto", async () => {
-    const res = await request(app)
-      .put(`/pedidos/${pedidoId}/status`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ status: "pronto" });
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe("pronto");
-  });
-
-  it("pronto → entregue", async () => {
+  it("em_transporte → entregue", async () => {
     const res = await request(app)
       .put(`/pedidos/${pedidoId}/status`)
       .set("Authorization", `Bearer ${token}`)
@@ -200,18 +191,18 @@ describe("PUT /pedidos/:id/status — fluxo completo", () => {
     expect(res.body.status).toBe("entregue");
   });
 
-  it("entregue → faturado", async () => {
+  it("entregue → aguardando_pagamento", async () => {
     const res = await request(app)
       .put(`/pedidos/${pedidoId}/status`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ status: "faturado" });
+      .send({ status: "aguardando_pagamento" });
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("faturado");
+    expect(res.body.status).toBe("aguardando_pagamento");
   });
 });
 
 describe("DELETE /pedidos/:id", () => {
-  it("rejeita excluir pedido não aberto", async () => {
+  it("rejeita excluir pedido não em_aberto", async () => {
     const res = await request(app)
       .delete(`/pedidos/${pedidoId}`)
       .set("Authorization", `Bearer ${token}`);

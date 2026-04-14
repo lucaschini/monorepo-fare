@@ -85,11 +85,9 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     const { cliente_id, prazo_entrega, observacoes, itens } = req.body;
 
     if (!cliente_id || !itens || !Array.isArray(itens) || itens.length === 0) {
-      res
-        .status(400)
-        .json({
-          error: "Campos obrigatórios: cliente_id, itens (array não vazio)",
-        });
+      res.status(400).json({
+        error: "Campos obrigatórios: cliente_id, itens (array não vazio)",
+      });
       return;
     }
 
@@ -178,20 +176,19 @@ router.put("/:id/status", async (req: AuthRequest, res: Response) => {
 
     const current = ped.rows[0].status;
     const transitions: Record<string, string[]> = {
-      aberto: ["em_producao"],
-      em_producao: ["aguardando_material", "pronto"],
-      aguardando_material: ["em_producao"],
-      pronto: ["entregue"],
-      entregue: ["faturado"],
-      faturado: [],
+      criando_arte: ["em_aberto"],
+      em_aberto: ["em_producao", "criando_arte"],
+      em_producao: ["aguardando_retirada"],
+      aguardando_retirada: ["em_transporte"],
+      em_transporte: ["entregue"],
+      entregue: ["aguardando_pagamento"],
+      aguardando_pagamento: [],
     };
 
     if (!transitions[current]?.includes(status)) {
-      res
-        .status(400)
-        .json({
-          error: `Não é possível mudar de "${current}" para "${status}"`,
-        });
+      res.status(400).json({
+        error: `Não é possível mudar de "${current}" para "${status}"`,
+      });
       return;
     }
 
@@ -248,10 +245,16 @@ router.delete("/:id", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    if (ped.rows[0].status !== "aberto") {
+    if (
+      ped.rows[0].status !== "em_aberto" &&
+      ped.rows[0].status !== "criando_arte"
+    ) {
       res
         .status(400)
-        .json({ error: "Só é possível excluir pedidos com status 'aberto'" });
+        .json({
+          error:
+            "Só é possível excluir pedidos em 'em_aberto' ou 'criando_arte'",
+        });
       return;
     }
 

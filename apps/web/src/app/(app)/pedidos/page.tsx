@@ -23,9 +23,14 @@ const STATUS_CONFIG: Record<
   string,
   { label: string; color: string; icon: any }
 > = {
-  aberto: {
-    label: "Aberto",
-    color: "bg-gray-100 text-gray-700",
+  criando_arte: {
+    label: "Criando Arte",
+    color: "bg-pink-50 text-pink-700",
+    icon: Package,
+  },
+  em_aberto: {
+    label: "Em Aberto",
+    color: "bg-amber-50 text-amber-700",
     icon: Package,
   },
   em_producao: {
@@ -33,24 +38,24 @@ const STATUS_CONFIG: Record<
     color: "bg-blue-50 text-blue-700",
     icon: Play,
   },
-  aguardando_material: {
-    label: "Aguardando Material",
-    color: "bg-amber-50 text-amber-700",
-    icon: Pause,
-  },
-  pronto: {
-    label: "Pronto",
-    color: "bg-emerald-50 text-emerald-700",
+  aguardando_retirada: {
+    label: "Aguardando Retirada",
+    color: "bg-purple-50 text-purple-700",
     icon: CheckCircle,
+  },
+  em_transporte: {
+    label: "Em Transporte",
+    color: "bg-cyan-50 text-cyan-700",
+    icon: Truck,
   },
   entregue: {
     label: "Entregue",
-    color: "bg-purple-50 text-purple-700",
+    color: "bg-emerald-50 text-emerald-700",
     icon: Truck,
   },
-  faturado: {
-    label: "Faturado",
-    color: "bg-teal-50 text-teal-700",
+  aguardando_pagamento: {
+    label: "Aguardando Pagamento",
+    color: "bg-orange-50 text-orange-700",
     icon: Receipt,
   },
 };
@@ -59,7 +64,21 @@ const TRANSITIONS: Record<
   string,
   { status: string; label: string; color: string; icon: any }[]
 > = {
-  aberto: [
+  criando_arte: [
+    {
+      status: "em_aberto",
+      label: "Abrir",
+      color: "bg-amber-600 hover:bg-amber-700 text-white",
+      icon: Package,
+    },
+  ],
+  em_aberto: [
+    {
+      status: "criando_arte",
+      label: "Criar Arte",
+      color: "border border-pink-200 text-pink-700 hover:bg-pink-50",
+      icon: Package,
+    },
     {
       status: "em_producao",
       label: "Iniciar Produção",
@@ -69,45 +88,38 @@ const TRANSITIONS: Record<
   ],
   em_producao: [
     {
-      status: "aguardando_material",
-      label: "Aguardar Material",
-      color: "border border-amber-200 text-amber-700 hover:bg-amber-50",
-      icon: Pause,
-    },
-    {
-      status: "pronto",
-      label: "Marcar Pronto",
-      color: "bg-emerald-600 hover:bg-emerald-700 text-white",
+      status: "aguardando_retirada",
+      label: "Pronto p/ Retirada",
+      color: "bg-purple-600 hover:bg-purple-700 text-white",
       icon: CheckCircle,
     },
   ],
-  aguardando_material: [
+  aguardando_retirada: [
     {
-      status: "em_producao",
-      label: "Retomar Produção",
-      color: "bg-blue-600 hover:bg-blue-700 text-white",
-      icon: Play,
+      status: "em_transporte",
+      label: "Enviar",
+      color: "bg-cyan-600 hover:bg-cyan-700 text-white",
+      icon: Truck,
     },
   ],
-  pronto: [
+  em_transporte: [
     {
       status: "entregue",
-      label: "Registrar Entrega",
-      color: "bg-purple-600 hover:bg-purple-700 text-white",
+      label: "Entregar",
+      color: "bg-emerald-600 hover:bg-emerald-700 text-white",
       icon: Truck,
     },
   ],
   entregue: [
     {
-      status: "faturado",
-      label: "Faturar",
-      color: "bg-teal-600 hover:bg-teal-700 text-white",
+      status: "aguardando_pagamento",
+      label: "Aguardar Pagamento",
+      color: "bg-orange-600 hover:bg-orange-700 text-white",
       icon: Receipt,
     },
   ],
-  faturado: [],
+  aguardando_pagamento: [],
 };
-
 type Tab = "todos" | "producao";
 
 interface ItemForm {
@@ -461,7 +473,8 @@ export default function PedidosPage() {
                               <t.icon size={15} />
                             </button>
                           ))}
-                          {p.status === "aberto" && (
+                          {(p.status === "aberto" ||
+                            p.status === "criando_arte") && (
                             <button
                               onClick={() => handleDelete(p.id)}
                               className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"

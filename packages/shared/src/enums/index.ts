@@ -16,12 +16,13 @@ export enum StatusOrcamento {
 }
 
 export enum StatusPedido {
-  ABERTO = "aberto",
+  CRIANDO_ARTE = "criando_arte",
+  EM_ABERTO = "em_aberto",
   EM_PRODUCAO = "em_producao",
-  AGUARDANDO_MATERIAL = "aguardando_material",
-  PRONTO = "pronto",
+  AGUARDANDO_RETIRADA = "aguardando_retirada",
+  EM_TRANSPORTE = "em_transporte",
   ENTREGUE = "entregue",
-  FATURADO = "faturado",
+  AGUARDANDO_PAGAMENTO = "aguardando_pagamento",
 }
 
 export enum TipoNota {
@@ -39,4 +40,23 @@ export enum StatusNota {
 export enum TipoMovimentacao {
   ENTRADA = "entrada",
   SAIDA = "saida",
+}
+
+export enum TipoTransacao {
+  RECEITA = "receita",
+  DESPESA = "despesa",
+}
+
+export enum MetodoPagamento {
+  PIX = "pix",
+  DINHEIRO = "dinheiro",
+  CARTAO_CREDITO = "cartao_credito",
+  CARTAO_DEBITO = "cartao_debito",
+  BOLETO = "boleto",
+  TRANSFERENCIA = "transferencia",
+}
+
+export enum StatusTransacao {
+  PENDENTE = "pendente",
+  PAGO = "pago",
 }

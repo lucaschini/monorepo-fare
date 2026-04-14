@@ -106,13 +106,20 @@ beforeAll(async () => {
     await request(app)
       .put(`/pedidos/${id}/status`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ status: "pronto" });
+      .send({ status: "aguardando_retirada" });
+    await request(app)
+      .put(`/pedidos/${id}/status`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ status: "em_transporte" });
+    await request(app)
+      .put(`/pedidos/${id}/status`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ status: "entregue" });
   }
 });
 
 describe("POST /pedidos/:id/entregar", () => {
-  it("rejeita entrega de pedido que não está pronto", async () => {
-    // Cria pedido aberto
+  it("rejeita entrega de pedido que não está entregue (status em_aberto)", async () => {
     const cli = await request(app)
       .post("/clientes")
       .set("Authorization", `Bearer ${token}`)
@@ -153,7 +160,6 @@ describe("POST /pedidos/:id/entregar", () => {
       .post(`/pedidos/${pedidoIdProduto}/entregar`)
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("entregue");
     expect(res.body.notas.length).toBe(1);
     expect(res.body.notas[0].tipo).toBe("nfe");
     expect(res.body.notas[0].status).toBe("aguardando");
@@ -178,14 +184,17 @@ describe("POST /pedidos/:id/entregar", () => {
     expect(tipos).toEqual(["nfe", "nfse"]);
   });
 
-  it("rejeita entregar pedido já entregue", async () => {
+  it("rejeita entregar pedido que saiu de entregue", async () => {
+    await request(app)
+      .put(`/pedidos/${pedidoIdProduto}/status`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ status: "aguardando_pagamento" });
     const res = await request(app)
       .post(`/pedidos/${pedidoIdProduto}/entregar`)
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(400);
   });
 });
-
 describe("GET /fiscal/notas", () => {
   it("lista todas as notas", async () => {
     const res = await request(app)

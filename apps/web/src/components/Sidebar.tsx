@@ -31,11 +31,11 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-60 flex-col border-r border-gray-200 bg-white">
       <div className="flex h-16 items-center gap-2.5 border-b border-gray-200 px-5">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-          G
+          Logo fare
         </div>
         <div>
           <p className="text-sm font-semibold text-gray-900 leading-tight">
-            ERP Gráfica
+            Fare Foto
           </p>
           <p className="text-[11px] text-gray-400">Sistema de Gestão</p>
         </div>

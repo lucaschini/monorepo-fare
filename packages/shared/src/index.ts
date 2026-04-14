@@ -9,6 +9,7 @@ export * from "./types/orcamento";
 export * from "./types/pedido";
 export * from "./types/estoque";
 export * from "./types/nota";
+export * from "./types/financeiro";
 
 // Validators
 export * from "./validators/documento";

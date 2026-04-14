@@ -22,25 +22,16 @@ router.post("/:pedidoId/entregar", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    if (pedido.rows[0].status !== "pronto") {
-      res
-        .status(400)
-        .json({
-          error:
-            "Só é possível registrar entrega de pedidos com status 'pronto'",
-        });
+    if (pedido.rows[0].status !== "entregue") {
+      res.status(400).json({
+        error: "Só é possível criar notas para pedidos com status 'entregue'",
+      });
       return;
     }
 
     const ped = pedido.rows[0];
 
     await client.query("BEGIN");
-
-    // Muda status para entregue
-    await client.query(
-      "UPDATE pedidos SET status = 'entregue', updated_at = NOW() WHERE id = $1",
-      [ped.id],
-    );
 
     // Determina tipo de nota baseado nos itens do pedido
     const itens = await client.query(
