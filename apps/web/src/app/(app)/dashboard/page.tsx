@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent, DragEvent } from "react";
 import { useSession } from "next-auth/react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
@@ -23,26 +23,82 @@ import {
   DollarSign,
   Eye,
   ChevronRight,
+  GripVertical,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 
 const STATUS_COLUMNS = [
-  { key: "criando_arte", label: "Criando Arte", color: "border-t-pink-400" },
-  { key: "em_aberto", label: "Em Aberto", color: "border-t-amber-400" },
-  { key: "em_producao", label: "Em Produção", color: "border-t-blue-400" },
+  {
+    key: "criando_arte",
+    label: "Criando Arte",
+    color: "border-t-pink-400",
+    bg: "bg-pink-50",
+    dot: "bg-pink-400",
+  },
+  {
+    key: "em_aberto",
+    label: "Em Aberto",
+    color: "border-t-amber-400",
+    bg: "bg-amber-50",
+    dot: "bg-amber-400",
+  },
+  {
+    key: "em_producao",
+    label: "Em Produção",
+    color: "border-t-blue-400",
+    bg: "bg-blue-50",
+    dot: "bg-blue-400",
+  },
   {
     key: "aguardando_retirada",
     label: "Aguardando Retirada",
     color: "border-t-purple-400",
+    bg: "bg-purple-50",
+    dot: "bg-purple-400",
   },
-  { key: "em_transporte", label: "Em Transporte", color: "border-t-cyan-400" },
-  { key: "entregue", label: "Entregue", color: "border-t-emerald-400" },
+  {
+    key: "em_transporte",
+    label: "Em Transporte",
+    color: "border-t-cyan-400",
+    bg: "bg-cyan-50",
+    dot: "bg-cyan-400",
+  },
+  {
+    key: "entregue",
+    label: "Entregue",
+    color: "border-t-emerald-400",
+    bg: "bg-emerald-50",
+    dot: "bg-emerald-400",
+  },
   {
     key: "aguardando_pagamento",
     label: "Aguardando Pagamento",
     color: "border-t-orange-400",
+    bg: "bg-orange-50",
+    dot: "bg-orange-400",
   },
 ];
+
+const NEXT_STATUS: Record<string, string> = {
+  criando_arte: "em_aberto",
+  em_aberto: "em_producao",
+  em_producao: "aguardando_retirada",
+  aguardando_retirada: "em_transporte",
+  em_transporte: "entregue",
+  entregue: "aguardando_pagamento",
+};
+
+// Valid transitions map for drag-and-drop validation
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  criando_arte: ["em_aberto"],
+  em_aberto: ["em_producao", "criando_arte"],
+  em_producao: ["aguardando_retirada"],
+  aguardando_retirada: ["em_transporte"],
+  em_transporte: ["entregue"],
+  entregue: ["aguardando_pagamento"],
+  aguardando_pagamento: [],
+};
 
 const METODOS = [
   { value: "pix", label: "Pix" },
@@ -65,6 +121,11 @@ export default function DashboardPage() {
     pedidos: 0,
     entregas: 0,
   });
+
+  // Drag state
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [dragValid, setDragValid] = useState<boolean>(false);
 
   // Modal venda rápida
   const [showVenda, setShowVenda] = useState(false);
@@ -102,7 +163,6 @@ export default function DashboardPage() {
     fetchData();
   }, [apiToken]);
 
-  // Filtro do kanban por busca
   const pedidosFiltrados = busca
     ? pedidos.filter(
         (p) =>
@@ -130,6 +190,74 @@ export default function DashboardPage() {
 
   async function openDetail(id: number) {
     setDetail(await api<Pedido>(`/pedidos/${id}`, {}, apiToken));
+  }
+
+  // ── Drag & Drop ──
+
+  function handleDragStart(e: DragEvent<HTMLDivElement>, pedido: Pedido) {
+    setDraggingId(pedido.id);
+    e.dataTransfer.setData(
+      "text/plain",
+      JSON.stringify({ id: pedido.id, status: pedido.status }),
+    );
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setDragOverColumn(null);
+    setDragValid(false);
+  }
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>, targetStatus: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverColumn(targetStatus);
+
+    // Check if this is a valid transition
+    const draggedPedido = pedidos.find((p) => p.id === draggingId);
+    if (draggedPedido) {
+      const valid =
+        draggedPedido.status === targetStatus ||
+        VALID_TRANSITIONS[draggedPedido.status]?.includes(targetStatus);
+      setDragValid(!!valid);
+    }
+  }
+
+  function handleDragLeave(e: DragEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverColumn(null);
+      setDragValid(false);
+    }
+  }
+
+  async function handleDrop(
+    e: DragEvent<HTMLDivElement>,
+    targetStatus: string,
+  ) {
+    e.preventDefault();
+    setDragOverColumn(null);
+    setDragValid(false);
+
+    try {
+      const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+      const pedidoId = data.id;
+      const sourceStatus = data.status;
+
+      if (sourceStatus === targetStatus) return;
+
+      if (!VALID_TRANSITIONS[sourceStatus]?.includes(targetStatus)) {
+        return;
+      }
+
+      await moveStatus(pedidoId, targetStatus);
+    } catch {
+      // ignore parse errors
+    }
+    setDraggingId(null);
   }
 
   // Venda rápida
@@ -181,15 +309,12 @@ export default function DashboardPage() {
     });
   }
 
-  // Próximo status possível para cada coluna
-  const NEXT_STATUS: Record<string, string> = {
-    criando_arte: "em_aberto",
-    em_aberto: "em_producao",
-    em_producao: "aguardando_retirada",
-    aguardando_retirada: "em_transporte",
-    em_transporte: "entregue",
-    entregue: "aguardando_pagamento",
-  };
+  // Resumo rápido
+  const totalValor = pedidos.reduce((sum, p) => sum + Number(p.valor_total), 0);
+  const emProducao = pedidos.filter((p) => p.status === "em_producao").length;
+  const aguardandoPagamento = pedidos.filter(
+    (p) => p.status === "aguardando_pagamento",
+  ).length;
 
   return (
     <>
@@ -289,42 +414,76 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Kanban */}
-        <div className="flex gap-3 overflow-x-auto pb-4">
-          {STATUS_COLUMNS.map((col) => {
+        {/* Drag hint */}
+        {pedidos.length > 0 && (
+          <p className="mb-3 text-xs text-gray-400 flex items-center gap-1">
+            <GripVertical size={12} /> Arraste os cards para mover entre colunas
+          </p>
+        )}
+
+        {/* Kanban Grid 3 - 3 - 2 */}
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          {STATUS_COLUMNS.slice(0, 6).map((col) => {
             const items = pedidosByStatus(col.key);
+            const isOver = dragOverColumn === col.key;
+            const showValidDrop = isOver && dragValid;
+            const showInvalidDrop = isOver && !dragValid && draggingId !== null;
+
             return (
               <div
                 key={col.key}
-                className={`flex w-56 min-w-[14rem] flex-shrink-0 flex-col rounded-xl border border-gray-200 bg-gray-50/50 border-t-4 ${col.color}`}
+                onDragOver={(e) => handleDragOver(e, col.key)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, col.key)}
+                className={`flex flex-col rounded-xl border border-t-4 transition-all duration-200 ${col.color} ${
+                  showValidDrop
+                    ? "border-brand-400 bg-brand-50/40 shadow-lg shadow-brand-100/50 scale-[1.01]"
+                    : showInvalidDrop
+                      ? "border-red-300 bg-red-50/30"
+                      : "border-gray-200 bg-gray-50/50"
+                }`}
               >
                 {/* Column header */}
                 <div className="flex items-center justify-between px-3 py-2.5">
-                  <span className="text-sm font-semibold text-gray-700">
-                    {col.label}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${col.dot}`} />
+                    <span className="text-sm font-semibold text-gray-700">
+                      {col.label}
+                    </span>
+                  </div>
                   <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-gray-200 px-1.5 text-xs font-medium text-gray-600">
                     {items.length}
                   </span>
                 </div>
 
                 {/* Cards */}
-                <div className="flex flex-1 flex-col gap-2 px-2 pb-2 min-h-[8rem]">
+                <div className="flex flex-1 flex-col gap-2 px-2 pb-2 min-h-[7rem]">
                   {items.length === 0 ? (
                     <p className="py-4 text-center text-xs text-gray-400">
-                      Nenhum pedido
+                      {isOver && dragValid ? "Solte aqui" : "Nenhum pedido"}
                     </p>
                   ) : (
                     items.map((p) => (
                       <div
                         key={p.id}
-                        className="group rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:shadow-md cursor-pointer"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, p)}
+                        onDragEnd={handleDragEnd}
                         onClick={() => openDetail(p.id)}
+                        className={`group rounded-lg border bg-white p-3 shadow-sm transition-all cursor-grab active:cursor-grabbing select-none ${
+                          draggingId === p.id
+                            ? "opacity-40 scale-95 border-brand-300 shadow-brand-100"
+                            : "border-gray-200 hover:shadow-md hover:border-gray-300"
+                        }`}
                       >
                         <div className="mb-2 flex items-center justify-between">
                           <span className="text-xs font-semibold text-gray-900">
                             PED-{p.id}
                           </span>
+                          <GripVertical
+                            size={12}
+                            className="text-gray-300 group-hover:text-gray-400"
+                          />
                         </div>
                         <p className="text-xs text-gray-600 truncate mb-2">
                           {p.cliente_nome}
@@ -334,7 +493,10 @@ export default function DashboardPage() {
                             {p.prazo_entrega
                               ? new Date(p.prazo_entrega).toLocaleDateString(
                                   "pt-BR",
-                                  { day: "2-digit", month: "2-digit" },
+                                  {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                  },
                                 )
                               : "—"}
                           </span>
@@ -366,6 +528,143 @@ export default function DashboardPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Bottom row: 2 columns */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Last status column */}
+          {(() => {
+            const col = STATUS_COLUMNS[6];
+            const items = pedidosByStatus(col.key);
+            const isOver = dragOverColumn === col.key;
+            const showValidDrop = isOver && dragValid;
+            const showInvalidDrop = isOver && !dragValid && draggingId !== null;
+
+            return (
+              <div
+                key={col.key}
+                onDragOver={(e) => handleDragOver(e, col.key)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, col.key)}
+                className={`flex flex-col rounded-xl border border-t-4 transition-all duration-200 ${col.color} ${
+                  showValidDrop
+                    ? "border-brand-400 bg-brand-50/40 shadow-lg shadow-brand-100/50 scale-[1.01]"
+                    : showInvalidDrop
+                      ? "border-red-300 bg-red-50/30"
+                      : "border-gray-200 bg-gray-50/50"
+                }`}
+              >
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${col.dot}`} />
+                    <span className="text-sm font-semibold text-gray-700">
+                      {col.label}
+                    </span>
+                  </div>
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-gray-200 px-1.5 text-xs font-medium text-gray-600">
+                    {items.length}
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-col gap-2 px-2 pb-2 min-h-[7rem]">
+                  {items.length === 0 ? (
+                    <p className="py-4 text-center text-xs text-gray-400">
+                      {isOver && dragValid ? "Solte aqui" : "Nenhum pedido"}
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {items.map((p) => (
+                        <div
+                          key={p.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, p)}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => openDetail(p.id)}
+                          className={`group rounded-lg border bg-white p-3 shadow-sm transition-all cursor-grab active:cursor-grabbing select-none ${
+                            draggingId === p.id
+                              ? "opacity-40 scale-95 border-brand-300"
+                              : "border-gray-200 hover:shadow-md hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-900">
+                              PED-{p.id}
+                            </span>
+                            <GripVertical
+                              size={12}
+                              className="text-gray-300 group-hover:text-gray-400"
+                            />
+                          </div>
+                          <p className="text-xs text-gray-600 truncate mb-2">
+                            {p.cliente_nome}
+                          </p>
+                          <div className="flex items-center justify-between text-[10px] text-gray-400">
+                            <span>
+                              {p.prazo_entrega
+                                ? new Date(p.prazo_entrega).toLocaleDateString(
+                                    "pt-BR",
+                                    {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                    },
+                                  )
+                                : "—"}
+                            </span>
+                            <span className="font-medium text-gray-700">
+                              {fmt(p.valor_total)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Resumo panel */}
+          <div className="flex flex-col rounded-xl border border-gray-200 bg-white p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                <BarChart3 size={18} />
+              </div>
+              <h4 className="text-sm font-semibold text-gray-900">
+                Resumo Rápido
+              </h4>
+            </div>
+            <div className="space-y-3 flex-1">
+              <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
+                <span className="text-xs text-gray-500">Total em pedidos</span>
+                <span className="text-sm font-bold text-gray-900">
+                  {fmt(totalValor)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-blue-50/50 px-3 py-2.5">
+                <span className="text-xs text-gray-500">Em produção</span>
+                <span className="text-sm font-bold text-blue-700">
+                  {emProducao}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-orange-50/50 px-3 py-2.5">
+                <span className="text-xs text-gray-500">Aguard. pagamento</span>
+                <span className="text-sm font-bold text-orange-700">
+                  {aguardandoPagamento}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-emerald-50/50 px-3 py-2.5">
+                <span className="text-xs text-gray-500">Entregas hoje</span>
+                <span className="text-sm font-bold text-emerald-700">
+                  {counts.entregas}
+                </span>
+              </div>
+            </div>
+            <Link
+              href="/pedidos"
+              className="mt-4 flex items-center justify-center gap-1 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition"
+            >
+              Ver todos os pedidos <ChevronRight size={12} />
+            </Link>
+          </div>
         </div>
       </div>
 
