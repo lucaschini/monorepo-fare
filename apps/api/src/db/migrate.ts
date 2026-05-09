@@ -5,6 +5,8 @@ import { up as up004 } from "./migrations/004_orcamentos_pedidos";
 import { up as up005 } from "./migrations/005_estoque";
 import { up as up006 } from "./migrations/006_notas_fiscais";
 import { up as up007 } from "./migrations/007_update_status_financeiro";
+import { up as up008 } from "./migrations/008_fiscal_config";
+
 import { pool } from "./connection";
 
 async function migrate() {
@@ -16,6 +18,7 @@ async function migrate() {
     await up005();
     await up006();
     await up007();
+    await up008();
     console.log("✅ Todas as migrations executadas com sucesso");
   } catch (error) {
     console.error("❌ Erro ao executar migrations:", error);

@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Warehouse,
   Receipt,
+  Settings,
 } from "lucide-react";
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/pedidos", label: "Pedidos", icon: ClipboardList },
   { href: "/estoque", label: "Estoque", icon: Warehouse },
   { href: "/notas", label: "Notas Fiscais", icon: Receipt },
+  { href: "/fiscal", label: "Config. Fiscal", icon: Settings },
 ];
 
 export default function Sidebar() {

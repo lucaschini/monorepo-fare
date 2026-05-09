@@ -2,6 +2,7 @@ import { pool } from "../db/connection";
 
 export async function cleanDatabase() {
   await pool.query(`
+    DELETE FROM audit_fiscal;
     DELETE FROM transacoes_financeiras;
     DELETE FROM notas_fiscais;
     DELETE FROM movimentacoes_estoque;
@@ -11,5 +12,6 @@ export async function cleanDatabase() {
     DELETE FROM orcamentos;
     DELETE FROM catalogo;
     DELETE FROM clientes;
+    DELETE FROM config_fiscal;
   `);
 }

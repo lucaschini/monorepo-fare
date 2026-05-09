@@ -60,3 +60,22 @@ export enum StatusTransacao {
   PENDENTE = "pendente",
   PAGO = "pago",
 }
+
+export enum AmbienteFiscal {
+  HOMOLOGACAO = "homologacao",
+  PRODUCAO = "producao",
+}
+
+export enum RegimeTributario {
+  SIMPLES_NACIONAL = "simples_nacional",
+  LUCRO_PRESUMIDO = "lucro_presumido",
+  LUCRO_REAL = "lucro_real",
+  MEI = "mei",
+}
+
+export enum AcaoFiscal {
+  EMISSAO = "emissao",
+  CONSULTA = "consulta",
+  CANCELAMENTO = "cancelamento",
+  REPROCESSAMENTO = "reprocessamento",
+}

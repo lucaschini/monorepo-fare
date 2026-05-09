@@ -11,6 +11,7 @@ import { up as up004 } from "../db/migrations/004_orcamentos_pedidos";
 import { up as up005 } from "../db/migrations/005_estoque";
 import { up as up006 } from "../db/migrations/006_notas_fiscais";
 import { up as up007 } from "../db/migrations/007_update_status_financeiro";
+import { up as up008 } from "../db/migrations/008_fiscal_config";
 
 beforeAll(async () => {
   const result = await pool.query("SELECT current_database()");
@@ -29,6 +30,7 @@ beforeAll(async () => {
   await up005();
   await up006();
   await up007();
+  await up008();
 });
 
 afterAll(async () => {
