@@ -4,7 +4,13 @@ import { useState, useEffect, FormEvent } from "react";
 import { useSession } from "next-auth/react";
 import Header from "@/components/Header";
 import { api } from "@/lib/api";
-import { Pedido, Cliente, CatalogoItem, StatusPedido } from "@erp/shared";
+import {
+  Pedido,
+  Cliente,
+  CatalogoItem,
+  StatusPedido,
+  MetodoPagamento,
+} from "@erp/shared";
 import {
   Plus,
   Search,
@@ -13,10 +19,12 @@ import {
   X,
   Package,
   Play,
-  Pause,
   CheckCircle,
   Truck,
   Receipt,
+  DollarSign,
+  FileCheck,
+  AlertCircle,
 } from "lucide-react";
 
 const STATUS_CONFIG: Record<
@@ -57,6 +65,16 @@ const STATUS_CONFIG: Record<
     label: "Aguardando Pagamento",
     color: "bg-orange-50 text-orange-700",
     icon: Receipt,
+  },
+  sinal: {
+    label: "Sinal (Parcial)",
+    color: "bg-yellow-50 text-yellow-700",
+    icon: DollarSign,
+  },
+  pago: {
+    label: "Pago",
+    color: "bg-green-50 text-green-700",
+    icon: CheckCircle,
   },
 };
 
@@ -119,7 +137,18 @@ const TRANSITIONS: Record<
     },
   ],
   aguardando_pagamento: [],
+  sinal: [],
+  pago: [],
 };
+
+const METODOS_PAGAMENTO: { value: string; label: string }[] = [
+  { value: MetodoPagamento.PIX, label: "PIX" },
+  { value: MetodoPagamento.DINHEIRO, label: "Dinheiro" },
+  { value: MetodoPagamento.CARTAO_CREDITO, label: "Cartão de Crédito" },
+  { value: MetodoPagamento.CARTAO_DEBITO, label: "Cartão de Débito" },
+  { value: MetodoPagamento.BOLETO, label: "Boleto" },
+  { value: MetodoPagamento.TRANSFERENCIA, label: "Transferência" },
+];
 type Tab = "todos" | "producao";
 
 interface ItemForm {
@@ -148,6 +177,16 @@ export default function PedidosPage() {
   const [observacoes, setObservacoes] = useState("");
   const [itensForm, setItensForm] = useState<ItemForm[]>([]);
   const [catalogoSel, setCatalogoSel] = useState<number | "">("");
+
+  const [paymentPedido, setPaymentPedido] = useState<Pedido | null>(null);
+  const [paymentValor, setPaymentValor] = useState("");
+  const [paymentMetodo, setPaymentMetodo] = useState("");
+  const [paymentObs, setPaymentObs] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentErro, setPaymentErro] = useState("");
+
+  // Nota emission loading
+  const [emitingNota, setEmitingNota] = useState<number | null>(null);
 
   // Detail modal
   const [detail, setDetail] = useState<Pedido | null>(null);
@@ -289,6 +328,78 @@ export default function PedidosPage() {
     }
   }
 
+  function openPaymentModal(pedido: Pedido) {
+    const saldo = Number(pedido.valor_total) - Number(pedido.valor_pago ?? 0);
+    setPaymentValor(saldo.toFixed(2));
+    setPaymentMetodo("");
+    setPaymentObs("");
+    setPaymentErro("");
+    setPaymentPedido(pedido);
+  }
+
+  async function handleRegistrarPagamento(e: FormEvent) {
+    e.preventDefault();
+    if (!paymentPedido) return;
+    setPaymentErro("");
+
+    const valor = parseFloat(paymentValor);
+    if (isNaN(valor) || valor <= 0) {
+      setPaymentErro("Informe um valor válido");
+      return;
+    }
+    if (!paymentMetodo) {
+      setPaymentErro("Selecione o método de pagamento");
+      return;
+    }
+
+    setPaymentLoading(true);
+    try {
+      await api(
+        `/pedidos/${paymentPedido.id}/registrar-pagamento`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            valor,
+            metodo_pagamento: paymentMetodo,
+            observacoes: paymentObs || null,
+          }),
+        },
+        apiToken,
+      );
+      setPaymentPedido(null);
+      fetchPedidos();
+      if (detail?.id === paymentPedido.id) openDetail(paymentPedido.id);
+    } catch (err: any) {
+      setPaymentErro(err.message);
+    } finally {
+      setPaymentLoading(false);
+    }
+  }
+
+  // ── Nota Fiscal Emission ──
+
+  async function handleEmitirNota(pedidoId: number) {
+    setEmitingNota(pedidoId);
+    try {
+      const nota = await api<{ id: number }>(
+        `/fiscal/notas/from-pedido/${pedidoId}`,
+        { method: "POST" },
+        apiToken,
+      );
+      await api(
+        `/fiscal/notas/${nota.id}/emitir`,
+        { method: "POST" },
+        apiToken,
+      );
+      alert("Nota fiscal enviada para emissão! Acompanhe em Notas Fiscais.");
+      fetchPedidos();
+    } catch (err: any) {
+      alert(`Erro ao emitir nota fiscal: ${err.message}`);
+    } finally {
+      setEmitingNota(null);
+    }
+  }
+
   function fmt(v: number | string) {
     return Number(v).toLocaleString("pt-BR", {
       style: "currency",
@@ -298,10 +409,10 @@ export default function PedidosPage() {
 
   // ── Contadores para aba produção ──
   const countProducao = pedidos.filter((p) =>
-    ["em_producao", "aguardando_material"].includes(p.status),
+    ["em_producao"].includes(p.status),
   ).length;
 
-  const prontos = pedidos.filter((p) => p.status === "pronto");
+  const prontos = pedidos.filter((p) => p.status === "aguardando_retirada");
 
   return (
     <>
@@ -426,7 +537,7 @@ export default function PedidosPage() {
                   return (
                     <tr
                       key={p.id}
-                      className={`border-b border-gray-50 transition hover:bg-gray-50/50 ${p.status === "pronto" ? "bg-emerald-50/30" : ""}`}
+                      className={`border-b border-gray-50 transition hover:bg-gray-50/50 ${p.status === "pago" ? "bg-green-50/20" : ""} ${p.status === "sinal" ? "bg-yellow-50/20" : ""}`}
                     >
                       <td className="px-4 py-3 font-medium text-gray-900">
                         #{p.id}
@@ -443,6 +554,11 @@ export default function PedidosPage() {
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-gray-900">
                         {fmt(p.valor_total)}
+                        {p.status === "sinal" && Number(p.valor_pago) > 0 && (
+                          <p className="text-xs text-yellow-600">
+                            Pago: {fmt(p.valor_pago)}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-500">
                         {p.prazo_entrega
@@ -473,6 +589,31 @@ export default function PedidosPage() {
                               <t.icon size={15} />
                             </button>
                           ))}
+                          {(p.status === "aguardando_pagamento" ||
+                            p.status === "sinal") && (
+                            <button
+                              onClick={() => openPaymentModal(p)}
+                              className="rounded-md p-1.5 text-gray-400 hover:bg-green-50 hover:text-green-600"
+                              title="Registrar Pagamento"
+                            >
+                              <DollarSign size={15} />
+                            </button>
+                          )}
+                          {p.status === "pago" && (
+                            <button
+                              onClick={() => handleEmitirNota(p.id)}
+                              disabled={emitingNota === p.id}
+                              className="rounded-md p-1.5 text-gray-400 hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50"
+                              title="Emitir Nota Fiscal"
+                            >
+                              <FileCheck
+                                size={15}
+                                className={
+                                  emitingNota === p.id ? "animate-pulse" : ""
+                                }
+                              />
+                            </button>
+                          )}
                           {(p.status === "aberto" ||
                             p.status === "criando_arte") && (
                             <button
@@ -772,6 +913,32 @@ export default function PedidosPage() {
               </div>
             </div>
 
+            {(detail.status === "sinal" ||
+              detail.status === "pago" ||
+              detail.status === "aguardando_pagamento") && (
+              <div
+                className={`mb-4 rounded-lg border px-4 py-3 text-sm ${detail.status === "pago" ? "border-green-200 bg-green-50" : detail.status === "sinal" ? "border-yellow-200 bg-yellow-50" : "border-orange-200 bg-orange-50"}`}
+              >
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Valor pago:</span>
+                  <span className="font-semibold">
+                    {fmt(detail.valor_pago ?? 0)}
+                  </span>
+                </div>
+                {detail.status !== "pago" && (
+                  <div className="flex justify-between mt-1">
+                    <span className="text-gray-600">Saldo devedor:</span>
+                    <span className="font-semibold text-orange-700">
+                      {fmt(
+                        Number(detail.valor_total) -
+                          Number(detail.valor_pago ?? 0),
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {detail.observacoes && (
               <p className="mb-4 text-sm text-gray-500 italic">
                 {detail.observacoes}
@@ -850,7 +1017,7 @@ export default function PedidosPage() {
             </div>
 
             {/* Ações de status */}
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 flex-wrap">
               {TRANSITIONS[detail.status]?.map((t) => (
                 <button
                   key={t.status}
@@ -860,36 +1027,160 @@ export default function PedidosPage() {
                   <t.icon size={14} /> {t.label}
                 </button>
               ))}
-              {detail.status === "pronto" && (
+              {(detail.status === "aguardando_pagamento" ||
+                detail.status === "sinal") && (
                 <button
-                  onClick={async () => {
-                    if (
-                      !confirm(
-                        "Registrar entrega deste pedido? Isso criará nota(s) fiscal(is) pendente(s).",
-                      )
-                    )
-                      return;
-                    try {
-                      const res = await api<{ notas_pendentes: number }>(
-                        `/pedidos/${detail.id}/entregar`,
-                        { method: "POST" },
-                        apiToken,
-                      );
-                      alert(
-                        `Entrega registrada! ${res.notas_pendentes} nota(s) fiscal(is) criada(s) como pendente(s).`,
-                      );
-                      fetchPedidos();
-                      setDetail(null);
-                    } catch (err: any) {
-                      alert(err.message);
-                    }
+                  onClick={() => {
+                    setDetail(null);
+                    openPaymentModal(detail);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
                 >
-                  <Truck size={14} /> Registrar Entrega
+                  <DollarSign size={14} /> Registrar Pagamento
+                </button>
+              )}
+              {detail.status === "pago" && (
+                <button
+                  onClick={() => {
+                    handleEmitirNota(detail.id);
+                    setDetail(null);
+                  }}
+                  disabled={emitingNota === detail.id}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                >
+                  <FileCheck size={14} /> Emitir Nota Fiscal
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Registrar Pagamento */}
+      {paymentPedido && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-12 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
+            <button
+              onClick={() => setPaymentPedido(null)}
+              className="absolute right-4 top-4 rounded-md p-1 text-gray-400 hover:text-gray-600"
+            >
+              <X size={18} />
+            </button>
+
+            <h2 className="mb-1 text-lg font-semibold text-gray-900">
+              Registrar Pagamento
+            </h2>
+            <p className="mb-4 text-sm text-gray-500">
+              Pedido #{paymentPedido.id} — {paymentPedido.cliente_nome}
+            </p>
+
+            {/* Resumo financeiro */}
+            <div className="mb-5 rounded-lg bg-gray-50 p-4 text-sm space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Valor total</span>
+                <span className="font-medium">
+                  {fmt(paymentPedido.valor_total)}
+                </span>
+              </div>
+              {Number(paymentPedido.valor_pago) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Já pago (sinal)</span>
+                  <span className="font-medium text-green-600">
+                    {fmt(paymentPedido.valor_pago)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                <span className="font-medium text-gray-700">Saldo devedor</span>
+                <span className="font-semibold text-orange-700">
+                  {fmt(
+                    Number(paymentPedido.valor_total) -
+                      Number(paymentPedido.valor_pago ?? 0),
+                  )}
+                </span>
+              </div>
+            </div>
+            <form onSubmit={handleRegistrarPagamento} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  Valor do Pagamento *
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  max={
+                    Number(paymentPedido.valor_total) -
+                    Number(paymentPedido.valor_pago ?? 0)
+                  }
+                  value={paymentValor}
+                  onChange={(e) => setPaymentValor(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Pagar o valor completo = marca como "Pago" e libera emissão da
+                  nota
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  Método de Pagamento *
+                </label>
+                <select
+                  value={paymentMetodo}
+                  onChange={(e) => setPaymentMetodo(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400"
+                  required
+                >
+                  <option value="">Selecione...</option>
+                  {METODOS_PAGAMENTO.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">
+                  Observações
+                </label>
+                <input
+                  type="text"
+                  value={paymentObs}
+                  onChange={(e) => setPaymentObs(e.target.value)}
+                  placeholder="Ex: Referência do PIX, nº do boleto..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400"
+                />
+              </div>
+
+              {paymentErro && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-600">
+                  <AlertCircle size={14} />
+                  {paymentErro}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPaymentPedido(null)}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={paymentLoading}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  <DollarSign size={14} />
+                  {paymentLoading ? "Registrando..." : "Confirmar Pagamento"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

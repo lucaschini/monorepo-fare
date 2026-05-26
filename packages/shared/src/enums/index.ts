@@ -23,6 +23,8 @@ export enum StatusPedido {
   EM_TRANSPORTE = "em_transporte",
   ENTREGUE = "entregue",
   AGUARDANDO_PAGAMENTO = "aguardando_pagamento",
+  SINAL = "sinal",
+  PAGO = "pago",
 }
 
 export enum TipoNota {

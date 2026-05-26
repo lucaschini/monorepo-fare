@@ -21,6 +21,7 @@ export interface Pedido {
   prazo_entrega?: string | null;
   observacoes?: string | null;
   valor_total: number;
+  valor_pago: number;
   created_at: string;
   updated_at: string;
   cliente_nome?: string;

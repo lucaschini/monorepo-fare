@@ -159,6 +159,65 @@ router.put("/config", async (req: AuthRequest, res: Response) => {
 // ══════════════════════════════════════════════════════
 // Operações fiscais (import dinâmico)
 // ══════════════════════════════════════════════════════
+router.post(
+  "/notas/from-pedido/:pedidoId",
+  async (req: AuthRequest, res: Response) => {
+    const pedidoId = parseInt(req.params.pedidoId, 10);
+    if (isNaN(pedidoId) || pedidoId <= 0) {
+      res.status(400).json({ error: "ID de pedido inválido" });
+      return;
+    }
+
+    try {
+      const existing = await query(
+        `SELECT * FROM notas_fiscais
+       WHERE pedido_id = $1 AND status != 'cancelada'
+       ORDER BY id DESC LIMIT 1`,
+        [pedidoId],
+      );
+
+      if (existing.rows.length > 0) {
+        res.json(existing.rows[0]);
+        return;
+      }
+
+      const pedResult = await query(
+        `SELECT p.*, c.id AS cid
+       FROM pedidos p
+       JOIN clientes c ON c.id = p.cliente_id
+       WHERE p.id = $1`,
+        [pedidoId],
+      );
+
+      if (pedResult.rows.length === 0) {
+        res.status(404).json({ error: "Pedido não encontrado" });
+        return;
+      }
+
+      const pedido = pedResult.rows[0];
+
+      if (pedido.status !== "pago") {
+        res.status(400).json({
+          error:
+            "O pedido precisa estar com status 'pago' para emitir nota fiscal",
+        });
+        return;
+      }
+
+      const notaResult = await query(
+        `INSERT INTO notas_fiscais (pedido_id, cliente_id, tipo, valor)
+       VALUES ($1, $2, 'nfse', $3)
+       RETURNING *`,
+        [pedidoId, pedido.cliente_id, pedido.valor_total],
+      );
+
+      res.status(201).json(notaResult.rows[0]);
+    } catch (error) {
+      console.error("Erro ao criar nota a partir do pedido:", error);
+      res.status(500).json({ error: "Erro interno" });
+    }
+  },
+);
 
 router.post("/notas/:id/emitir", async (req: AuthRequest, res: Response) => {
   try {

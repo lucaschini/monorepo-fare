@@ -49,12 +49,17 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 // Buscar por ID (com itens)
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id <= 0) {
+      res.status(400).json({ error: "ID inválido" });
+      return;
+    }
     const ped = await query(
       `SELECT p.*, c.nome_razao AS cliente_nome
        FROM pedidos p
        JOIN clientes c ON c.id = p.cliente_id
        WHERE p.id = $1`,
-      [req.params.id],
+      [id],
     );
 
     if (ped.rows.length === 0) {
@@ -158,6 +163,11 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 // Alterar status
 router.put("/:id/status", async (req: AuthRequest, res: Response) => {
   try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id <= 0) {
+      res.status(400).json({ error: "ID inválido" });
+      return;
+    }
     const { status } = req.body;
     const valid = Object.values(StatusPedido);
 
@@ -166,9 +176,7 @@ router.put("/:id/status", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const ped = await query("SELECT * FROM pedidos WHERE id = $1", [
-      req.params.id,
-    ]);
+    const ped = await query("SELECT * FROM pedidos WHERE id = $1", [id]);
     if (ped.rows.length === 0) {
       res.status(404).json({ error: "Pedido não encontrado" });
       return;
@@ -183,6 +191,8 @@ router.put("/:id/status", async (req: AuthRequest, res: Response) => {
       em_transporte: ["entregue"],
       entregue: ["aguardando_pagamento"],
       aguardando_pagamento: [],
+      sinal: [],
+      pago: [],
     };
 
     if (!transitions[current]?.includes(status)) {
@@ -194,7 +204,7 @@ router.put("/:id/status", async (req: AuthRequest, res: Response) => {
 
     const result = await query(
       `UPDATE pedidos SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
-      [status, req.params.id],
+      [status, id],
     );
 
     res.json(result.rows[0]);
@@ -234,6 +244,108 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post(
+  "/:id/registrar-pagamento",
+  async (req: AuthRequest, res: Response) => {
+    const pedidoId = parseInt(req.params.id, 10);
+    if (isNaN(pedidoId) || pedidoId <= 0) {
+      res.status(400).json({ error: "ID de pedido inválido" });
+      return;
+    }
+
+    const { valor, metodo_pagamento, observacoes } = req.body;
+
+    const valorPgto = parseFloat(valor);
+    if (isNaN(valorPgto) || valorPgto <= 0) {
+      res.status(400).json({ error: "Valor deve ser um número positivo" });
+      return;
+    }
+
+    if (
+      !metodo_pagamento ||
+      !Object.values(MetodoPagamento).includes(metodo_pagamento)
+    ) {
+      res.status(400).json({ error: "Método de pagamento inválido" });
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const pedResult = await client.query(
+        "SELECT * FROM pedidos WHERE id = $1 FOR UPDATE",
+        [pedidoId],
+      );
+
+      if (pedResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Pedido não encontrado" });
+        return;
+      }
+
+      const pedido = pedResult.rows[0];
+
+      if (!["aguardando_pagamento", "sinal"].includes(pedido.status)) {
+        await client.query("ROLLBACK");
+        res.status(400).json({
+          error: `Pedido com status "${pedido.status}" não está aguardando pagamento`,
+        });
+        return;
+      }
+
+      const valorTotal = parseFloat(pedido.valor_total);
+      const valorJaPago = parseFloat(pedido.valor_pago ?? 0);
+      const saldoDevedor = valorTotal - valorJaPago;
+
+      if (valorPgto > saldoDevedor + 0.005) {
+        await client.query("ROLLBACK");
+        res.status(400).json({
+          error: `Valor excede o saldo devedor de R$ ${saldoDevedor.toFixed(2)}`,
+        });
+        return;
+      }
+
+      await client.query(
+        `INSERT INTO transacoes_financeiras
+         (tipo, descricao, valor, metodo_pagamento, status, pedido_id, observacoes)
+       VALUES ($1, $2, $3, $4, 'pago', $5, $6)`,
+        [
+          "receita",
+          `Pagamento – Pedido #${pedidoId}`,
+          valorPgto,
+          metodo_pagamento,
+          pedidoId,
+          observacoes ?? null,
+        ],
+      );
+
+      const novoValorPago = valorJaPago + valorPgto;
+      const novoStatus = novoValorPago >= valorTotal - 0.005 ? "pago" : "sinal";
+
+      await client.query(
+        "UPDATE pedidos SET status = $1, valor_pago = $2, updated_at = NOW() WHERE id = $3",
+        [novoStatus, novoValorPago, pedidoId],
+      );
+
+      await client.query("COMMIT");
+
+      res.json({
+        status: novoStatus,
+        valor_pago: novoValorPago,
+        valor_total: valorTotal,
+        valor_restante: Math.max(0, valorTotal - novoValorPago),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Erro ao registrar pagamento:", error);
+      res.status(500).json({ error: "Erro interno" });
+    } finally {
+      client.release();
+    }
+  },
+);
+
 // Deletar pedido (só aberto)
 router.delete("/:id", async (req: AuthRequest, res: Response) => {
   try {
@@ -249,12 +361,9 @@ router.delete("/:id", async (req: AuthRequest, res: Response) => {
       ped.rows[0].status !== "em_aberto" &&
       ped.rows[0].status !== "criando_arte"
     ) {
-      res
-        .status(400)
-        .json({
-          error:
-            "Só é possível excluir pedidos em 'em_aberto' ou 'criando_arte'",
-        });
+      res.status(400).json({
+        error: "Só é possível excluir pedidos em 'em_aberto' ou 'criando_arte'",
+      });
       return;
     }
 

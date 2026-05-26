@@ -51,6 +51,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       status,
       vencimento,
       observacoes,
+      pedido_id,
     } = req.body;
 
     if (!tipo || !descricao || valor === undefined) {
@@ -65,7 +66,8 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    if (isNaN(valor) || valor <= 0) {
+    const valorNum = parseFloat(valor);
+    if (isNaN(valorNum) || valorNum <= 0) {
       res.status(400).json({ error: "Valor deve ser um número positivo" });
       return;
     }
@@ -78,18 +80,27 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    const pedidoIdNum = pedido_id ? parseInt(pedido_id, 10) : null;
+    if (pedido_id && (isNaN(pedidoIdNum!) || pedidoIdNum! <= 0)) {
+      res.status(400).json({ error: "pedido_id inválido" });
+      return;
+    }
+
     const result = await query(
-      `INSERT INTO transacoes_financeiras (tipo, descricao, valor, metodo_pagamento, status, vencimento, observacoes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO transacoes_financeiras
+        (tipo, descricao, valor, metodo_pagamento, status, vencimento, observacoes, pedido_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         tipo,
         descricao,
         valor,
+        valorNum,
         metodo_pagamento || null,
         status || "pendente",
         vencimento || null,
         observacoes || null,
+        pedidoIdNum,
       ],
     );
 
