@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { query, pool } from "../db/connection";
 import { AuthRequest, authMiddleware } from "../middleware/auth";
-import { StatusPedido } from "@erp/shared";
+import { StatusPedido, MetodoPagamento } from "@erp/shared";
 
 const router = Router();
 router.use(authMiddleware);
