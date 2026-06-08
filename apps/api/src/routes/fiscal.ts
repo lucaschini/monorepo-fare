@@ -2,7 +2,7 @@
 
 import { Router, Response } from "express";
 import { query } from "../db/connection";
-import { AuthRequest, authMiddleware } from "../middleware/auth";
+import { AuthRequest, authMiddleware, authorize } from "../middleware/auth";
 
 // Import estático APENAS do certificate (não depende de xml-crypto)
 import { encryptPassword } from "../services/fiscal/certificate";
@@ -49,7 +49,7 @@ router.get("/config", async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.put("/config", async (req: AuthRequest, res: Response) => {
+router.put("/config", authorize("admin"), async (req: AuthRequest, res: Response) => {
   try {
     const {
       cnpj,
@@ -219,7 +219,7 @@ router.post(
   },
 );
 
-router.post("/notas/:id/emitir", async (req: AuthRequest, res: Response) => {
+router.post("/notas/:id/emitir", authorize("admin"), async (req: AuthRequest, res: Response) => {
   try {
     const fiscal = await loadFiscalService();
     const ip = req.ip || req.socket.remoteAddress || "unknown";
@@ -285,7 +285,7 @@ router.get("/notas/:id/consultar", async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post("/notas/:id/cancelar", async (req: AuthRequest, res: Response) => {
+router.post("/notas/:id/cancelar", authorize("admin"), async (req: AuthRequest, res: Response) => {
   try {
     const fiscal = await loadFiscalService();
     const { justificativa } = req.body;
@@ -324,7 +324,7 @@ router.post("/notas/:id/cancelar", async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post("/notas/reprocessar", async (req: AuthRequest, res: Response) => {
+router.post("/notas/reprocessar", authorize("admin"), async (req: AuthRequest, res: Response) => {
   try {
     const fiscal = await loadFiscalService();
     const ip = req.ip || req.socket.remoteAddress || "unknown";
