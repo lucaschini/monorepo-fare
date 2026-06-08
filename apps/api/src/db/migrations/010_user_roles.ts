@@ -5,6 +5,8 @@ export async function up() {
     ALTER TABLE usuarios
     ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'operador'
   `);
+
+  console.log("✅ Migration 010");
 }
 
 export async function down() {
