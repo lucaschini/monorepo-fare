@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import app from "../../app";
 import { pool } from "../../db/connection";
 import bcrypt from "bcryptjs";
@@ -18,8 +19,8 @@ describe("POST /auth/login", () => {
     `);
     const hash = await bcrypt.hash("teste123", 10);
     await pool.query(
-      `INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET senha_hash = $3`,
+      `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'admin')
+       ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'admin'`,
       ["Teste", "teste@erp.local", hash],
     );
   });
@@ -52,5 +53,14 @@ describe("POST /auth/login", () => {
     expect(res.body.token).toBeDefined();
     expect(res.body.usuario.email).toBe("teste@erp.local");
     expect(res.body.usuario).not.toHaveProperty("senha_hash");
+  });
+
+  it("token JWT contém o role do usuário", async () => {
+    const res = await request(app)
+      .post("/auth/login")
+      .send({ email: "teste@erp.local", senha: "teste123" });
+    expect(res.status).toBe(200);
+    const decoded = jwt.decode(res.body.token) as Record<string, unknown>;
+    expect(decoded).toHaveProperty("role");
   });
 });

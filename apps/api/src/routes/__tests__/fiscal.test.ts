@@ -38,7 +38,7 @@ beforeAll(async () => {
   // Login
   const hash = await bcrypt.hash("teste123", 10);
   await pool.query(
-    `INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET senha_hash = $3`,
+    `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'admin') ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'admin'`,
     ["Teste", "teste@erp.local", hash],
   );
   const login = await request(app)
@@ -423,5 +423,64 @@ describe("GET /fiscal/auditoria/:notaId", () => {
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+});
+
+// ══════════════════════════════════════════════════════
+// RBAC — rotas protegidas exigem admin
+// ══════════════════════════════════════════════════════
+
+describe("RBAC — operador não pode executar ações admin", () => {
+  let tokenOp: string;
+
+  beforeAll(async () => {
+    const hash = await bcrypt.hash("op123", 10);
+    await pool.query(
+      `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'operador')
+       ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'operador'`,
+      ["Operador", "operador@erp.local", hash],
+    );
+    const login = await request(app)
+      .post("/auth/login")
+      .send({ email: "operador@erp.local", senha: "op123" });
+    tokenOp = login.body.token;
+  });
+
+  it("PUT /fiscal/config retorna 403", async () => {
+    const res = await request(app)
+      .put("/fiscal/config")
+      .set("Authorization", `Bearer ${tokenOp}`)
+      .send({ cnpj: "00000000000000", razao_social: "X", inscricao_municipal: "123" });
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "Sem permissão para esta ação" });
+  });
+
+  it("POST /fiscal/notas/:id/emitir retorna 403", async () => {
+    const res = await request(app)
+      .post(`/fiscal/notas/${notaNfseId}/emitir`)
+      .set("Authorization", `Bearer ${tokenOp}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("POST /fiscal/notas/:id/cancelar retorna 403", async () => {
+    const res = await request(app)
+      .post(`/fiscal/notas/${notaNfseId}/cancelar`)
+      .set("Authorization", `Bearer ${tokenOp}`)
+      .send({ justificativa: "teste de cancelamento" });
+    expect(res.status).toBe(403);
+  });
+
+  it("POST /fiscal/notas/reprocessar retorna 403", async () => {
+    const res = await request(app)
+      .post("/fiscal/notas/reprocessar")
+      .set("Authorization", `Bearer ${tokenOp}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /fiscal/notas continua acessível para operador", async () => {
+    const res = await request(app)
+      .get("/fiscal/notas")
+      .set("Authorization", `Bearer ${tokenOp}`);
+    expect(res.status).toBe(200);
   });
 });

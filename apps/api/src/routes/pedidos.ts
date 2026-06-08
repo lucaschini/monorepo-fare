@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { query, pool } from "../db/connection";
-import { AuthRequest, authMiddleware } from "../middleware/auth";
+import { AuthRequest, authMiddleware, authorize } from "../middleware/auth";
 import { StatusPedido, MetodoPagamento } from "@erp/shared";
 
 const router = Router();
@@ -347,7 +347,7 @@ router.post(
 );
 
 // Deletar pedido (só aberto)
-router.delete("/:id", async (req: AuthRequest, res: Response) => {
+router.delete("/:id", authorize("admin"), async (req: AuthRequest, res: Response) => {
   try {
     const ped = await query("SELECT * FROM pedidos WHERE id = $1", [
       req.params.id,

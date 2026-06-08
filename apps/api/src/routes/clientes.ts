@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { query } from "../db/connection";
-import { AuthRequest, authMiddleware } from "../middleware/auth";
+import { AuthRequest, authMiddleware, authorize } from "../middleware/auth";
 import { validarDocumento, TipoCliente } from "@erp/shared";
 
 const router = Router();
@@ -192,7 +192,7 @@ router.put("/:id/fiscal", async (req: AuthRequest, res: Response) => {
 });
 
 // Deletar cliente
-router.delete("/:id", async (req: AuthRequest, res: Response) => {
+router.delete("/:id", authorize("admin"), async (req: AuthRequest, res: Response) => {
   try {
     const result = await query(
       "DELETE FROM clientes WHERE id = $1 RETURNING id",

@@ -30,8 +30,8 @@ beforeAll(async () => {
 
   const hash = await bcrypt.hash("teste123", 10);
   await pool.query(
-    `INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3)
-     ON CONFLICT (email) DO UPDATE SET senha_hash = $3`,
+    `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'admin')
+     ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'admin'`,
     ["Teste", "teste@erp.local", hash],
   );
 

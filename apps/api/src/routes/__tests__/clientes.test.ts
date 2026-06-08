@@ -38,8 +38,8 @@ beforeAll(async () => {
 
   const hash = await bcrypt.hash("teste123", 10);
   await pool.query(
-    `INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3)
-     ON CONFLICT (email) DO UPDATE SET senha_hash = $3`,
+    `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'admin')
+     ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'admin'`,
     ["Teste", "teste@erp.local", hash],
   );
 
@@ -280,5 +280,24 @@ describe("DELETE /clientes/:id", () => {
       .delete("/clientes/99999")
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(404);
+  });
+
+  it("retorna 403 para usuário com role operador", async () => {
+    const hash = await bcrypt.hash("op123", 10);
+    await pool.query(
+      `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'operador')
+       ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'operador'`,
+      ["Operador", "operador@erp.local", hash],
+    );
+    const loginOp = await request(app)
+      .post("/auth/login")
+      .send({ email: "operador@erp.local", senha: "op123" });
+    const tokenOp = loginOp.body.token;
+
+    const res = await request(app)
+      .delete("/clientes/1")
+      .set("Authorization", `Bearer ${tokenOp}`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "Sem permissão para esta ação" });
   });
 });

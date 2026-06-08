@@ -13,7 +13,7 @@ vi.mock("../../db/connection", () => ({
 
 vi.mock("jsonwebtoken", () => ({
   default: {
-    verify: vi.fn().mockReturnValue({ id: 1 }),
+    verify: vi.fn().mockReturnValue({ id: 1, role: "admin" }),
   },
 }));
 

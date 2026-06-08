@@ -21,7 +21,7 @@ beforeAll(async () => {
 
   const hash = await bcrypt.hash("teste123", 10);
   await pool.query(
-    `INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET senha_hash = $3`,
+    `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'admin') ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'admin'`,
     ["Teste", "teste@erp.local", hash],
   );
   const login = await request(app)
@@ -202,6 +202,25 @@ describe("PUT /pedidos/:id/status — fluxo completo", () => {
 });
 
 describe("DELETE /pedidos/:id", () => {
+  it("retorna 403 para usuário com role operador", async () => {
+    const hash = await bcrypt.hash("op123", 10);
+    await pool.query(
+      `INSERT INTO usuarios (nome, email, senha_hash, role) VALUES ($1, $2, $3, 'operador')
+       ON CONFLICT (email) DO UPDATE SET senha_hash = $3, role = 'operador'`,
+      ["Operador", "operador@erp.local", hash],
+    );
+    const loginOp = await request(app)
+      .post("/auth/login")
+      .send({ email: "operador@erp.local", senha: "op123" });
+    const tokenOp = loginOp.body.token;
+
+    const res = await request(app)
+      .delete(`/pedidos/${pedidoId}`)
+      .set("Authorization", `Bearer ${tokenOp}`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "Sem permissão para esta ação" });
+  });
+
   it("rejeita excluir pedido não em_aberto", async () => {
     const res = await request(app)
       .delete(`/pedidos/${pedidoId}`)
