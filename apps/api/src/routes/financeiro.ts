@@ -94,7 +94,6 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       [
         tipo,
         descricao,
-        valor,
         valorNum,
         metodo_pagamento || null,
         status || "pendente",
